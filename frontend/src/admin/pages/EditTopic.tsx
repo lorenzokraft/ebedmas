@@ -9,12 +9,16 @@ interface Topic {
   name: string;
   subject_id: number;
   subject_name: string;
+  grade_id: number;
+  grade_name: string;
 }
 
 const EditTopic = () => {
   const [name, setName] = useState('');
   const [subjectId, setSubjectId] = useState('');
+  const [gradeId, setGradeId] = useState('');
   const [subjects, setSubjects] = useState([]);
+  const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { id } = useParams();
@@ -22,14 +26,18 @@ const EditTopic = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [topicRes, subjectsRes] = await Promise.all([
+        const [topicRes, subjectsRes, gradesRes] = await Promise.all([
           api.get(`/api/admin/topics/${id}`),
-          api.get('/api/admin/subjects')
+          api.get('/api/admin/subjects'),
+          api.get('/api/admin/grades')
         ]);
 
+        console.log('Topic data:', topicRes.data); // Debug log
         setName(topicRes.data.name);
-        setSubjectId(topicRes.data.subject_id.toString());
+        setSubjectId(topicRes.data.subject_id?.toString() || '');
+        setGradeId(topicRes.data.grade_id?.toString() || '');
         setSubjects(subjectsRes.data);
+        setGrades(gradesRes.data);
       } catch (error) {
         console.error('Error fetching data:', error);
         Swal.fire({
@@ -46,7 +54,7 @@ const EditTopic = () => {
     };
 
     fetchData();
-  }, [id]);
+  }, [id, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +63,8 @@ const EditTopic = () => {
     try {
       await api.put(`/api/admin/topics/${id}`, {
         name,
-        subject_id: subjectId
+        subject_id: parseInt(subjectId),
+        grade_id: parseInt(gradeId)
       });
 
       Swal.fire({
@@ -77,6 +86,10 @@ const EditTopic = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancel = () => {
+    navigate('/admin/topics');
   };
 
   if (loading) {
@@ -119,6 +132,26 @@ const EditTopic = () => {
             </div>
 
             <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="grade">
+                Year
+              </label>
+              <select
+                id="grade"
+                value={gradeId}
+                onChange={(e) => setGradeId(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                required
+              >
+                <option value="">Select a year</option>
+                {grades.map((grade: any) => (
+                  <option key={grade.id} value={grade.id}>
+                    {grade.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
                 Topic Name
               </label>
@@ -133,15 +166,24 @@ const EditTopic = () => {
             </div>
 
             <div className="flex items-center justify-between">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
-                  loading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {loading ? 'Updating...' : 'Update Topic'}
-              </button>
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {loading ? 'Updating...' : 'Update Topic'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -150,4 +192,4 @@ const EditTopic = () => {
   );
 };
 
-export default EditTopic; 
+export default EditTopic;

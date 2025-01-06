@@ -149,32 +149,83 @@ export const getTopicCountBySubject = async (req: Request, res: Response) => {
 export const getTopicsBySubjectAndYear = async (req: Request, res: Response) => {
   try {
     const { subject, year } = req.params;
-    console.log('Fetching topics for:', { subject, year });
+    console.log('\n=== Starting Topic Fetch ===');
+    console.log('Request params:', { subject, year });
+
+    // Debug: Check all subjects in the database
+    const [allSubjects] = await pool.query('SELECT * FROM subjects');
+    console.log('\nAll subjects in database:', allSubjects);
+
+    // Debug: Check all grades in the database
+    const [allGrades] = await pool.query('SELECT * FROM grades');
+    console.log('\nAll grades in database:', allGrades);
+
+    // Debug: Check all topics in the database
+    const [allTopics] = await pool.query('SELECT * FROM topics');
+    console.log('\nAll topics in database:', allTopics);
+
+    // First, get the subject ID
+    const subjectQuery = 'SELECT id, name FROM subjects WHERE LOWER(name) LIKE LOWER(?)';
+    console.log('\nSubject Query:', subjectQuery);
+    console.log('Subject Params:', [`%${subject}%`]);
+
+    const [subjects] = await pool.query(subjectQuery, [`%${subject}%`]);
+    console.log('Found subjects:', subjects);
+
+    if (!subjects.length) {
+      console.log('No subject found for:', subject);
+      return res.json({
+        categories: [{
+          name: `${subject.charAt(0).toUpperCase() + subject.slice(1)} Topics`,
+          topics: []
+        }],
+        stats: { totalTopics: 0, totalQuestions: 0 }
+      });
+    }
+
+    // Get the grade ID
+    const gradeQuery = 'SELECT id, name FROM grades WHERE LOWER(name) = LOWER(?)';
+    console.log('\nGrade Query:', gradeQuery);
+    console.log('Grade Params:', [`Year ${year}`]);
+
+    const [grades] = await pool.query(gradeQuery, [`Year ${year}`]);
+    console.log('Found grades:', grades);
+
+    if (!grades.length) {
+      console.log('No grade found for year:', year);
+      return res.json({
+        categories: [{
+          name: `${subject.charAt(0).toUpperCase() + subject.slice(1)} Topics`,
+          topics: []
+        }],
+        stats: { totalTopics: 0, totalQuestions: 0 }
+      });
+    }
 
     const query = `
       SELECT 
         t.id,
         t.name,
         t.description,
-        COUNT(q.id) as question_count,
+        COUNT(DISTINCT q.id) as question_count,
         s.name as subject_name,
         g.name as grade_name
       FROM topics t
+      JOIN subjects s ON t.subject_id = s.id
+      JOIN grades g ON t.grade_id = g.id
       LEFT JOIN questions q ON q.topic_id = t.id
-      LEFT JOIN subjects s ON t.subject_id = s.id
-      LEFT JOIN grades g ON t.grade_id = g.id
-      WHERE LOWER(s.name) LIKE LOWER(?)
-      AND g.name = ?
+      WHERE s.id = ?
+      AND g.id = ?
       GROUP BY t.id, t.name, t.description, s.name, g.name
       ORDER BY t.name
     `;
 
-    const params = [`%${subject}%`, `Year ${year}`];
-    console.log('Query:', query);
-    console.log('Parameters:', params);
+    const params = [subjects[0].id, grades[0].id];
+    console.log('\nFinal Topics Query:', query);
+    console.log('Final Topics Params:', params);
 
     const [topics] = await pool.query(query, params);
-    console.log('Raw database results:', topics);
+    console.log('\nRaw topics results:', topics);
 
     // Transform the data
     const transformedTopics = topics.map((topic: any) => ({
@@ -183,6 +234,8 @@ export const getTopicsBySubjectAndYear = async (req: Request, res: Response) => 
       description: topic.description || 'Practice questions and improve your skills',
       questionCount: parseInt(topic.question_count) || 0
     }));
+
+    console.log('\nTransformed topics:', transformedTopics);
 
     const response = {
       categories: [{
@@ -195,12 +248,15 @@ export const getTopicsBySubjectAndYear = async (req: Request, res: Response) => 
       }
     };
 
-    console.log('Sending response:', response);
+    console.log('\nFinal response:', response);
     res.json(response);
 
   } catch (error) {
-    console.error('Detailed error:', error);
-    console.error('SQL Error:', error.sqlMessage);
+    console.error('\n=== Error in getTopicsBySubjectAndYear ===');
+    console.error('Error details:', error);
+    if ('sqlMessage' in error) {
+      console.error('SQL Error:', error.sqlMessage);
+    }
     res.status(500).json({ 
       message: 'Failed to get topics',
       error: error instanceof Error ? error.message : 'Unknown error'

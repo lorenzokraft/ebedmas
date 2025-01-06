@@ -9,11 +9,14 @@ const CreateTopic = () => {
   const [description, setDescription] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [subjects, setSubjects] = useState([]);
+  const [gradeId, setGradeId] = useState('');
+  const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchSubjects();
+    fetchGrades();
   }, []);
 
   const fetchSubjects = async () => {
@@ -26,14 +29,36 @@ const CreateTopic = () => {
     }
   };
 
+  const fetchGrades = async () => {
+    try {
+      const response = await api.get('/api/admin/grades');
+      setGrades(response.data);
+    } catch (error) {
+      console.error('Error fetching grades:', error);
+      Swal.fire('Error!', 'Failed to fetch grades', 'error');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim() || !subjectId || !gradeId) {
+      Swal.fire({
+        title: 'Error!',
+        text: 'Please fill in all required fields',
+        icon: 'error',
+        confirmButtonColor: '#EF4444',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await api.post('/api/admin/topics', {
-        name,
-        subject_id: subjectId
+      await api.post('/api/admin/topics', {
+        name: name.trim(),
+        description: description.trim() || null,
+        subject_id: parseInt(subjectId),
+        grade_id: parseInt(gradeId)
       });
 
       Swal.fire({
@@ -68,7 +93,7 @@ const CreateTopic = () => {
             {/* Subject Selection */}
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="subject">
-                Subject
+                Subject *
               </label>
               <select
                 id="subject"
@@ -81,6 +106,27 @@ const CreateTopic = () => {
                 {subjects.map((subject: any) => (
                   <option key={subject.id} value={subject.id}>
                     {subject.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Grade Selection */}
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="grade">
+                Year/Grade *
+              </label>
+              <select
+                id="grade"
+                value={gradeId}
+                onChange={(e) => setGradeId(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                required
+              >
+                <option value="">Select a year/grade</option>
+                {grades.map((grade: any) => (
+                  <option key={grade.id} value={grade.id}>
+                    {grade.name}
                   </option>
                 ))}
               </select>
@@ -102,15 +148,16 @@ const CreateTopic = () => {
             </div>
 
             {/* Description */}
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
-                Description
+                Description (Optional)
               </label>
               <textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                rows={4}
               />
             </div>
 
@@ -119,7 +166,7 @@ const CreateTopic = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
+                className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${
                   loading ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
@@ -133,4 +180,4 @@ const CreateTopic = () => {
   );
 };
 
-export default CreateTopic; 
+export default CreateTopic;

@@ -176,9 +176,9 @@ export const getPublicGradeStats = async (req: Request, res: Response) => {
         COUNT(DISTINCT t.id) as topic_count,
         COUNT(DISTINCT q.id) as question_count
       FROM grades g
-      LEFT JOIN questions q ON q.grade_id = g.id
-      LEFT JOIN subjects s ON q.subject_id = s.id
-      LEFT JOIN topics t ON q.topic_id = t.id
+      CROSS JOIN subjects s
+      LEFT JOIN topics t ON t.grade_id = g.id AND t.subject_id = s.id
+      LEFT JOIN questions q ON q.grade_id = g.id AND q.subject_id = s.id
       GROUP BY g.id, g.name, s.id, s.name
       ORDER BY g.name, s.name
     `);

@@ -33,3 +33,20 @@ dist-ssr
 **/*.js
 !*.config.js
 !vite.config.js
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Project documentation and internal files
+project-status.md
+context.md
+.cursorrules
+.bolt/
+
+# Database backups
+*.sql
+
+# Uploads
+backend/uploads/

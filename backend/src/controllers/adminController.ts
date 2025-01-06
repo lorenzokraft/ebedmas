@@ -202,24 +202,78 @@ const getUsers = async (req: Request, res: Response) => {
 
 const getGrades = async (req: Request, res: Response) => {
   try {
-    const [grades] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        g.id,
-        g.name,
-        g.created_at,
-        g.created_by,
-        a.name as created_by_name,
-        COUNT(q.id) as questions_count
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // First, get all subjects
+    const [subjects] = await pool.query(`
+      SELECT id, name FROM subjects
+      ORDER BY name
+    `) as [RowDataPacket[], any];
+
+    // Get grades with basic info and creator name
+    const [grades] = await pool.query(`
+      SELECT 
+        g.*, 
+        au.name as created_by_name,
+        (
+          SELECT COUNT(DISTINCT t.id)
+          FROM topics t
+          JOIN questions q ON q.topic_id = t.id
+          WHERE q.grade_id = g.id
+        ) as total_topics,
+        (
+          SELECT COUNT(q.id)
+          FROM questions q
+          WHERE q.grade_id = g.id
+        ) as total_questions
+      FROM grades g 
+      LEFT JOIN admin_users au ON g.created_by = au.id 
+      WHERE g.created_by = ?
+      ORDER BY g.name`,
+      [adminId]
+    ) as [RowDataPacket[], any];
+
+    // Get subject stats for each grade
+    const [subjectStats] = await pool.query(`
+      SELECT 
+        g.id as grade_id,
+        s.id as subject_id,
+        s.name as subject_name,
+        COUNT(DISTINCT t.id) as topic_count,
+        COUNT(DISTINCT q.id) as question_count
       FROM grades g
-      LEFT JOIN admin_users a ON g.created_by = a.id
-      LEFT JOIN questions q ON g.id = q.grade_id
-      GROUP BY g.id
-      ORDER BY g.created_at DESC`
-    );
-    res.json(grades);
+      CROSS JOIN subjects s
+      LEFT JOIN questions q ON q.grade_id = g.id AND q.subject_id = s.id
+      LEFT JOIN topics t ON q.topic_id = t.id
+      WHERE g.created_by = ?
+      GROUP BY g.id, s.id, s.name
+      ORDER BY g.name, s.name`,
+      [adminId]
+    ) as [RowDataPacket[], any];
+
+    // Transform the data
+    const gradesWithStats = grades.map((grade: any) => ({
+      ...grade,
+      subjects: subjects.map(subject => {
+        const stats = subjectStats.find(
+          stat => stat.grade_id === grade.id && stat.subject_id === subject.id
+        );
+        return {
+          id: subject.id,
+          name: subject.name,
+          topicCount: stats?.topic_count || 0,
+          questionCount: stats?.question_count || 0
+        };
+      })
+    }));
+
+    res.json(gradesWithStats);
   } catch (error) {
-    console.error('Error fetching grades:', error);
-    res.status(500).json({ message: 'Failed to fetch grades' });
+    console.error('Error in getGrades:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 
@@ -417,22 +471,30 @@ const createQuestion = async (req: Request, res: Response) => {
 
 const createTopic = async (req: Request, res: Response) => {
   try {
-    const { name, subject_id } = req.body;
-    // Get admin ID from the token
+    const { name, description, subject_id, grade_id } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
 
     // Validate required fields
-    if (!name || !subject_id || !adminId) {
+    if (!name || !subject_id || !grade_id || !adminId) {
       return res.status(400).json({ 
-        message: 'Topic name, subject and admin ID are required' 
+        message: 'Topic name, subject, and grade are required' 
       });
     }
 
-    // Insert topic into database with created_by
-    const [result] = await pool.query(
-      'INSERT INTO topics (name, subject_id, created_by) VALUES (?, ?, ?)',
-      [name, subject_id, adminId]
+    // Insert topic into database with created_by and grade_id
+    const [result] = await pool.query<ResultSetHeader>(
+      'INSERT INTO topics (name, description, subject_id, created_by, grade_id) VALUES (?, ?, ?, ?, ?)',
+      [name, description || null, subject_id, adminId, grade_id]
     );
+
+    console.log('Topic created:', {
+      name,
+      description,
+      subject_id,
+      grade_id,
+      adminId,
+      topicId: result.insertId
+    });
 
     res.status(201).json({
       message: 'Topic created successfully',
@@ -442,7 +504,8 @@ const createTopic = async (req: Request, res: Response) => {
     console.error('Error creating topic:', error);
     res.status(500).json({ 
       message: 'Failed to create topic',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      details: error
     });
   }
 };
@@ -456,11 +519,14 @@ const getAllTopics = async (req: Request, res: Response) => {
         t.subject_id,
         t.created_at,
         t.created_by,
+        t.grade_id,
         s.name as subject_name,
-        a.name as created_by_name
+        a.name as created_by_name,
+        g.name as grade_name
       FROM topics t
       LEFT JOIN subjects s ON t.subject_id = s.id
       LEFT JOIN admin_users a ON t.created_by = a.id
+      LEFT JOIN grades g ON t.grade_id = g.id
       ORDER BY t.created_at DESC`
     );
 
@@ -514,9 +580,12 @@ const getTopicById = async (req: Request, res: Response) => {
         t.subject_id,
         t.created_at,
         t.created_by,
-        s.name as subject_name
+        t.grade_id,
+        s.name as subject_name,
+        g.name as grade_name
       FROM topics t
       LEFT JOIN subjects s ON t.subject_id = s.id
+      LEFT JOIN grades g ON t.grade_id = g.id
       WHERE t.id = ? AND (t.created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
       [id, adminId, adminId]
     );
@@ -535,24 +604,22 @@ const getTopicById = async (req: Request, res: Response) => {
 const updateTopic = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, subject_id } = req.body;
+    const { name, subject_id, grade_id } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
 
-    // Check if topic exists and admin has permission
-    const [topics] = await pool.query<RowDataPacket[]>(
-      `SELECT * FROM topics 
-       WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
+    // Check if topic exists and user has permission
+    const [existingTopic] = await pool.query<RowDataPacket[]>(
+      'SELECT * FROM topics WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = "super_admin"))',
       [id, adminId, adminId]
     );
 
-    if (!topics[0]) {
+    if (!existingTopic[0]) {
       return res.status(404).json({ message: 'Topic not found or unauthorized' });
     }
 
-    // Update topic
     await pool.query(
-      'UPDATE topics SET name = ?, subject_id = ? WHERE id = ?',
-      [name, subject_id, id]
+      'UPDATE topics SET name = ?, subject_id = ?, grade_id = ? WHERE id = ?',
+      [name, subject_id, grade_id, id]
     );
 
     res.json({ message: 'Topic updated successfully' });
@@ -656,13 +723,30 @@ const createGrade = async (req: Request, res: Response) => {
     const { name } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
 
-    if (!name) {
+    if (!name || !adminId) {
       return res.status(400).json({ message: 'Grade name is required' });
     }
 
-    const [result] = await pool.query(
+    // Normalize the grade name to ensure consistent format (e.g., "Year 5")
+    const normalizedName = name.trim().replace(/^(year|grade)\s*/i, '');
+    const formattedName = `Year ${normalizedName}`;
+
+    // Check if grade already exists (case-insensitive)
+    const [existingGrades] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM grades WHERE LOWER(name) = LOWER(?)',
+      [formattedName]
+    );
+
+    if (existingGrades.length > 0) {
+      return res.status(400).json({
+        message: `Grade "${formattedName}" already exists`
+      });
+    }
+
+    // Insert the new grade
+    const [result] = await pool.query<ResultSetHeader>(
       'INSERT INTO grades (name, created_by) VALUES (?, ?)',
-      [name, adminId]
+      [formattedName, adminId]
     );
 
     res.status(201).json({
@@ -671,7 +755,10 @@ const createGrade = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error creating grade:', error);
-    res.status(500).json({ message: 'Failed to create grade' });
+    res.status(500).json({ 
+      message: 'Failed to create grade',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 };
 

@@ -7,10 +7,36 @@ import api from '../services/api';
 
 const CreateGrade = () => {
   const [gradeName, setGradeName] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const validateGradeName = (name: string) => {
+    // Remove any leading "Year" or "Grade" and trim spaces
+    const normalizedName = name.trim().replace(/^(year|grade)\s*/i, '');
+    
+    // Check if it's a number between 1 and 13
+    const number = parseInt(normalizedName);
+    if (isNaN(number) || number < 1 || number > 13) {
+      return false;
+    }
+    
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateGradeName(gradeName)) {
+      Swal.fire({
+        title: 'Invalid Grade',
+        text: 'Please enter a valid grade number between 1 and 13 (e.g., "5" or "Year 5")',
+        icon: 'error',
+        confirmButtonColor: '#EF4444'
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
       const response = await api.post('/api/admin/grades', { name: gradeName });
       
@@ -23,14 +49,16 @@ const CreateGrade = () => {
         });
         navigate('/admin/grades');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating grade:', error);
       Swal.fire({
         title: 'Error!',
-        text: 'Failed to create grade. Please try again.',
+        text: error.response?.data?.message || 'Failed to create grade. Please try again.',
         icon: 'error',
         confirmButtonColor: '#EF4444'
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,22 +73,28 @@ const CreateGrade = () => {
               <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-bold mb-2">
                   Grade Name
-                  <input
-                    type="text"
-                    value={gradeName}
-                    onChange={(e) => setGradeName(e.target.value)}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mt-1"
-                    placeholder="Enter grade name"
-                    required
-                  />
                 </label>
+                <input
+                  type="text"
+                  value={gradeName}
+                  onChange={(e) => setGradeName(e.target.value)}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mt-1"
+                  placeholder="Enter grade number (e.g., 5 or Year 5)"
+                  required
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  Enter a grade number between 1 and 13. You can optionally prefix with "Year" or "Grade".
+                </p>
               </div>
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                  disabled={loading}
+                  className={`bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded ${
+                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  Create Grade
+                  {loading ? 'Creating...' : 'Create Grade'}
                 </button>
                 <button
                   type="button"
@@ -78,4 +112,4 @@ const CreateGrade = () => {
   );
 };
 
-export default CreateGrade; 
+export default CreateGrade;

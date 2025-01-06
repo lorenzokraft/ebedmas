@@ -17,8 +17,8 @@ interface Grade {
   id: number;
   name: string;
   subjects: Subject[];
-  totalTopics: number;
-  totalQuestions: number;
+  total_topics: number;
+  total_questions: number;
   created_at: string;
   created_by: number;
   created_by_name: string;
@@ -32,24 +32,11 @@ const ManageGrades = () => {
   const fetchGrades = async () => {
     try {
       setLoading(true);
-      const [gradesRes, statsRes] = await Promise.all([
-        api.get('/api/grades'),
-        api.get('/api/grades/stats')
-      ]);
-
-      const grades = gradesRes.data;
-      const stats = statsRes.data;
-
-      const gradesWithStats = grades.map(grade => ({
-        ...grade,
-        questionCount: stats.questionCounts[grade.id] || 0,
-        topicCount: stats.topicCounts[grade.id] || 0
-      }));
-
-      setGrades(gradesWithStats);
-    } catch (error) {
+      const response = await api.get('/api/admin/grades');
+      setGrades(response.data);
+    } catch (error: any) {
       console.error('Error fetching grades:', error);
-      setError('Failed to fetch grades. Please try again later.');
+      setError(error.response?.data?.message || 'Failed to fetch grades. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -137,7 +124,7 @@ const ManageGrades = () => {
 
         <div className="grid gap-6">
           {grades.map((grade) => (
-            <div key={grade.id} className="bg-grey rounded-lg shadow-md p-6">
+            <div key={grade.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <BookOpen className="w-6 h-6 text-gray-400" />
@@ -160,30 +147,29 @@ const ManageGrades = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {['English Language', 'Mathematics', 'Science'].map((subject) => (
-                  <div key={subject} className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="text-lg font-medium mb-4">{subject}</h3>
+                {grade.subjects?.map((subject) => (
+                  <div key={subject.id} className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium mb-4">{subject.name}</h3>
                     <div className="space-y-2 text-gray-600">
                       <div className="flex justify-between">
                         <span>Topics:</span>
-                        <span className="font-medium">
-                          {grade.subjects?.find(s => s.name === subject)?.topicCount || 0}
-                        </span>
+                        <span className="font-medium">{subject.topicCount || 0}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Questions:</span>
-                        <span className="font-medium">
-                          {grade.subjects?.find(s => s.name === subject)?.questionCount || 0}
-                        </span>
+                        <span className="font-medium">{subject.questionCount || 0}</span>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-4 text-sm text-gray-500">
+              <div className="mt-4 text-sm text-gray-500 flex gap-3">
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  {grade.total_topics || 0} Total Topics
+                </span>
                 <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                  {grade.totalTopics || 0} Total Topics
+                  {grade.total_questions || 0} Total Questions
                 </span>
               </div>
             </div>

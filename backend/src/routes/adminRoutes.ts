@@ -41,61 +41,57 @@ router.post('/login', login as RequestHandler);
 // Protected routes - apply authentication middleware
 router.use(authenticateAdmin as RequestHandler);
 
+// Grade routes
+router.get('/grades', getGrades as RequestHandler);
+router.get('/grades/stats', getGrades as RequestHandler);
+router.post('/grades', createGrade as RequestHandler);
+router.put('/grades/:id', updateGrade as RequestHandler);
+router.delete('/grades/:id', deleteGrade as RequestHandler);
+
 // Question routes with file upload
 router.post('/questions', 
-  authenticateAdmin as RequestHandler, 
   upload, 
   createQuestion as RequestHandler
 );
 router.put('/questions/:id', 
-  authenticateAdmin as RequestHandler, 
   upload, 
   updateQuestion as RequestHandler
 );
 router.get('/questions', 
-  authenticateAdmin as RequestHandler, 
   getQuestions as RequestHandler
 );
 router.delete('/questions/:id', 
-  authenticateAdmin as RequestHandler, 
   deleteQuestion as RequestHandler
 );
 router.get('/questions/:id', 
-  authenticateAdmin as RequestHandler, 
   getQuestionById as RequestHandler
 );
 
 // User routes
-router.get('/recent-users', authenticateAdmin as RequestHandler, getRecentUsers as RequestHandler);
-router.get('/user-count', authenticateAdmin as RequestHandler, getUserCount as RequestHandler);
-router.get('/users', authenticateAdmin as RequestHandler, getUsers as RequestHandler);
+router.get('/recent-users', getRecentUsers as RequestHandler);
+router.get('/user-count', getUserCount as RequestHandler);
+router.get('/users', getUsers as RequestHandler);
 
 // Admin routes
-router.get('/admins', authenticateAdmin as RequestHandler, getAdmins as RequestHandler);
-router.post('/admins', authenticateAdmin as RequestHandler, createAdmin as RequestHandler);
-router.put('/admins/:id', authenticateAdmin as RequestHandler, updateAdmin as RequestHandler);
-router.delete('/admins/:id', authenticateAdmin as RequestHandler, deleteAdmin as RequestHandler);
-router.put('/admins/:id/status', authenticateAdmin as RequestHandler, updateAdminStatus as RequestHandler);
-router.get('/admins/:id', authenticateAdmin as RequestHandler, getAdminById as RequestHandler);
-
-// Grade routes
-router.get('/grades', authenticateAdmin as RequestHandler, getGrades as RequestHandler);
-router.post('/grades', authenticateAdmin as RequestHandler, createGrade as RequestHandler);
-router.put('/grades/:id', authenticateAdmin as RequestHandler, updateGrade as RequestHandler);
-router.delete('/grades/:id', authenticateAdmin as RequestHandler, deleteGrade as RequestHandler);
+router.get('/admins', getAdmins as RequestHandler);
+router.post('/admins', createAdmin as RequestHandler);
+router.put('/admins/:id', updateAdmin as RequestHandler);
+router.delete('/admins/:id', deleteAdmin as RequestHandler);
+router.put('/admins/:id/status', updateAdminStatus as RequestHandler);
+router.get('/admins/:id', getAdminById as RequestHandler);
 
 // Subject routes
-router.get('/subjects', authenticateAdmin as RequestHandler, getSubjects as RequestHandler);
-router.post('/subjects', authenticateAdmin as RequestHandler, createSubject as RequestHandler);
-router.put('/subjects/:id', authenticateAdmin as RequestHandler, updateSubject as RequestHandler);
-router.delete('/subjects/:id', authenticateAdmin as RequestHandler, deleteSubject as RequestHandler);
-router.get('/subjects/:id/topics', authenticateAdmin as RequestHandler, getTopicsBySubject as RequestHandler);
+router.get('/subjects', getSubjects as RequestHandler);
+router.post('/subjects', createSubject as RequestHandler);
+router.put('/subjects/:id', updateSubject as RequestHandler);
+router.delete('/subjects/:id', deleteSubject as RequestHandler);
+router.get('/subjects/:id/topics', getTopicsBySubject as RequestHandler);
 
 // Topic routes
-router.get('/topics', authenticateAdmin as RequestHandler, getAllTopics as RequestHandler);
-router.post('/topics', authenticateAdmin as RequestHandler, createTopic as RequestHandler);
-router.get('/topics/:id', authenticateAdmin as RequestHandler, getTopicById as RequestHandler);
-router.put('/topics/:id', authenticateAdmin as RequestHandler, updateTopic as RequestHandler);
-router.delete('/topics/:id', authenticateAdmin as RequestHandler, deleteTopic as RequestHandler);
+router.get('/topics', getAllTopics as RequestHandler);
+router.post('/topics', createTopic as RequestHandler);
+router.get('/topics/:id', getTopicById as RequestHandler);
+router.put('/topics/:id', updateTopic as RequestHandler);
+router.delete('/topics/:id', deleteTopic as RequestHandler);
 
 export default router; 
