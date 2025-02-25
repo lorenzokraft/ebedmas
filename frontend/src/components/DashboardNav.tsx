@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   ChevronDown, 
@@ -14,8 +14,18 @@ import {
   Clock,
   Target,
   Brain,
-  Lightbulb
+  Lightbulb,
+  User,
+  Settings,
+  Users
 } from 'lucide-react';
+import axios from 'axios';
+
+interface Learner {
+  id: number;
+  name: string;
+  grade: string;
+}
 
 interface SubMenuItem {
   name: string;
@@ -37,7 +47,39 @@ interface DashboardNavProps {
 
 const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [learners, setLearners] = useState<Learner[]>([]);
   const location = useLocation();
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchLearners = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('http://localhost:5000/api/learners', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setLearners(response.data);
+      } catch (error) {
+        console.error('Error fetching learners:', error);
+      }
+    };
+
+    fetchLearners();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const menuItems: MenuItem[] = [
     {
@@ -136,13 +178,75 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
             </div>
 
             <div className="flex items-center">
-              <button
-                onClick={logout}
-                className="inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md"
-              >
-                <LogOut className="w-5 h-5 mr-2" />
-                Logout
-              </button>
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md transition-colors duration-200"
+                >
+                  <User className="w-5 h-5 mr-2" />
+                  <span>Account</span>
+                  {isUserMenuOpen ? (
+                    <ChevronUp className="w-4 h-4 ml-2" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 ml-2" />
+                  )}
+                </button>
+
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900">Learners</p>
+                      {learners.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {learners.map((learner) => (
+                            <div key={learner.id} className="flex items-center text-sm text-gray-700">
+                              <Users className="w-4 h-4 mr-2 text-gray-400" />
+                              {learner.name} - Grade {learner.grade}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 mt-1">No learners added yet</p>
+                      )}
+                    </div>
+                    
+                    <Link
+                      to="/profile"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <User className="w-4 h-4 mr-2" />
+                        Profile
+                      </div>
+                    </Link>
+                    
+                    <Link
+                      to="/settings"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <Settings className="w-4 h-4 mr-2" />
+                        Settings
+                      </div>
+                    </Link>
+                    
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <div className="flex items-center">
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Logout
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

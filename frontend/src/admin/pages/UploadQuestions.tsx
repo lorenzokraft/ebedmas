@@ -20,6 +20,12 @@ interface Topic {
   subject_id: number;
 }
 
+interface Section {
+  id: number;
+  name: string;
+  topic_id: number;
+}
+
 interface QuestionForm {
   question_text: string;
   question_type: string;
@@ -29,6 +35,7 @@ interface QuestionForm {
   grade_id: number | '';
   subject_id: number | '';
   topic_id: number | '';
+  section_id: number | '';
   order_num: number;
 }
 
@@ -42,6 +49,7 @@ const UploadQuestions = () => {
     grade_id: '',
     subject_id: '',
     topic_id: '',
+    section_id: '',
     order_num: 0,
   });
 
@@ -51,6 +59,7 @@ const UploadQuestions = () => {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const navigate = useNavigate();
@@ -93,10 +102,23 @@ const UploadQuestions = () => {
     try {
       const formDataToSend = new FormData();
 
+      // Validate required fields
+      if (!formData.question_text || !formData.correct_answer || 
+          !formData.grade_id || !formData.subject_id || 
+          !formData.topic_id || !formData.section_id) {
+        throw new Error('Please fill in all required fields');
+      }
+
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== undefined && value !== '') {
-          if (key === 'options' && formData.question_type === 'click') {
-            formDataToSend.append(key, JSON.stringify(value));
+          if (key === 'options') {
+            // Format options as array of objects for all question types
+            const formattedOptions = value.filter((opt: string) => opt.trim() !== '').map((opt: string, index: number) => ({
+              id: index + 1,
+              text: opt.trim(),
+              isCorrect: false
+            }));
+            formDataToSend.append(key, JSON.stringify(formattedOptions));
           } else {
             formDataToSend.append(key, value.toString());
           }
@@ -111,11 +133,15 @@ const UploadQuestions = () => {
         formDataToSend.append('explanation_image', explanationImage);
       }
 
-      await api.post('/api/admin/questions', formDataToSend, {
+      console.log('Sending form data:', Object.fromEntries(formDataToSend));
+
+      const response = await api.post('/api/admin/questions', formDataToSend, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
+
+      console.log('Server response:', response.data);
 
       setFormData({
         question_text: '',
@@ -126,6 +152,7 @@ const UploadQuestions = () => {
         grade_id: '',
         subject_id: '',
         topic_id: '',
+        section_id: '',
         order_num: 0,
       });
       setQuestionImages([]);
@@ -183,6 +210,8 @@ const UploadQuestions = () => {
         try {
           const response = await api.get(`/api/admin/subjects/${formData.subject_id}/topics`);
           setTopics(response.data);
+          // Reset topic and section when subject changes
+          setFormData(prev => ({ ...prev, topic_id: '', section_id: '' }));
         } catch (error) {
           console.error('Error fetching topics:', error);
           setError('Failed to load topics');
@@ -194,6 +223,24 @@ const UploadQuestions = () => {
 
     fetchTopics();
   }, [formData.subject_id]);
+
+  useEffect(() => {
+    const fetchSections = async () => {
+      if (formData.topic_id && typeof formData.topic_id === 'number' && formData.topic_id > 0) {
+        try {
+          const response = await api.get(`/api/admin/topics/${formData.topic_id}/sections`);
+          setSections(response.data);
+        } catch (error) {
+          console.error('Error fetching sections:', error);
+          setError('Failed to load sections');
+        }
+      } else {
+        setSections([]);
+      }
+    };
+
+    fetchSections();
+  }, [formData.topic_id]);
 
   if (loading) {
     return (
@@ -421,6 +468,30 @@ const UploadQuestions = () => {
                   ))}
                 </select>
               </label>
+            </div>
+
+            {/* Section Dropdown */}
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Section *
+                <select
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mt-1"
+                  value={formData.section_id}
+                  onChange={(e) => setFormData({ ...formData, section_id: Number(e.target.value) })}
+                  required
+                  disabled={!formData.topic_id}
+                >
+                  <option value="">Select Section</option>
+                  {sections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!formData.topic_id && (
+                <p className="mt-1 text-sm text-gray-500">Please select a topic first</p>
+              )}
             </div>
 
             {/* Order Number */}

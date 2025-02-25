@@ -3,11 +3,10 @@ import pool from '../utils/db';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 
 interface AuthenticatedRequest extends Request {
-  user: {
+  user?: {
     id: number;
     email: string;
-    role: string;
-  }
+  };
 }
 
 interface Topic extends RowDataPacket {
@@ -33,7 +32,7 @@ export const getTopics = async (req: Request, res: Response) => {
 export const createTopic = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { name, subject_id, description } = req.body;
-    const adminId = req.user.id;
+    const adminId = req.user?.id;
 
     // First create the topic
     const [result] = await pool.execute<ResultSetHeader>(
@@ -61,7 +60,7 @@ export const updateTopic = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, subject_id } = req.body;
-    const adminId = req.user.id;
+    const adminId = req.user?.id;
 
     const [result] = await pool.execute<ResultSetHeader>(
       'UPDATE topics SET name = ?, subject_id = ? WHERE id = ? AND admin_id = ?',
@@ -82,7 +81,7 @@ export const updateTopic = async (req: AuthenticatedRequest, res: Response) => {
 export const deleteTopic = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const adminId = req.user.id;
+    const adminId = req.user?.id;
 
     // Check if there are any questions using this topic
     const [questions] = await pool.query<RowDataPacket[]>(
@@ -390,5 +389,45 @@ export const getTopicCountsBySubject = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error getting topic counts:', error);
     res.status(500).json({ message: 'Failed to get topic counts' });
+  }
+};
+
+// Get topic details including stats
+export const getTopicDetails = async (req: Request, res: Response) => {
+  try {
+    const { topicId } = req.params;
+
+    // Get topic details
+    const [topics] = await pool.query<RowDataPacket[]>(
+      `SELECT t.*, COUNT(DISTINCT s.id) as skills, COUNT(DISTINCT q.id) as games
+       FROM topics t
+       LEFT JOIN sections s ON t.id = s.topic_id
+       LEFT JOIN questions q ON s.id = q.section_id
+       WHERE t.id = ?
+       GROUP BY t.id`,
+      [topicId]
+    );
+
+    if (topics.length === 0) {
+      return res.status(404).json({ message: 'Topic not found' });
+    }
+
+    const topic = topics[0];
+
+    // Format response
+    const response = {
+      id: topic.id,
+      name: topic.name,
+      description: topic.description || 'No description available',
+      stats: {
+        skills: topic.skills || 0,
+        games: topic.games || 0
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching topic details:', error);
+    res.status(500).json({ message: 'Failed to fetch topic details' });
   }
 };

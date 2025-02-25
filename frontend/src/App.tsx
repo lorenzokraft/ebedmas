@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Login from './components/Login';
-import Register from './components/Register';
 import UserDashboard from './components/UserDashboard.tsx';
 import QuizPage from './components/QuizPage';
 import SubscriptionPage from './components/SubscriptionPage';
@@ -38,6 +37,17 @@ import TopicListingPage from './components/subjects/TopicListingPage';
 import TopicQuizPage from './components/quiz/TopicQuizPage';
 import TopicsList from './components/subjects/TopicsList';
 import MathsTopicList from './components/subjects/MathsTopicList';
+import SectionListingPage from './components/sections/SectionListingPage';
+import ManageSections from './admin/pages/ManageSections';
+import CreateSection from './admin/pages/CreateSection';
+import ForSchools from './pages/ForSchools';
+import SchoolRequests from './admin/pages/SchoolRequests';
+import PlanDetail from './pages/PlanDetail';
+import Terms from './pages/Terms';
+import TrialConfirmation from './pages/TrialConfirmation';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const adminToken = localStorage.getItem('adminToken');
@@ -57,19 +67,23 @@ const AppContent = () => {
   const location = useLocation();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
+  const { isPasswordSet, checkPasswordStatus } = useAuth();
 
   // Check auth status on mount and token changes
   useEffect(() => {
     const checkAuth = () => {
       const token = localStorage.getItem('token');
       setIsAuthenticated(!!token);
+      if (token) {
+        checkPasswordStatus();
+      }
     };
 
     checkAuth();
     // Listen for storage events (in case token is changed in another tab)
     window.addEventListener('storage', checkAuth);
     return () => window.removeEventListener('storage', checkAuth);
-  }, []);
+  }, [checkPasswordStatus]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -82,6 +96,12 @@ const AppContent = () => {
     setIsAuthenticated(true);
   };
 
+  // Function to check if route should be protected
+  const shouldProtectRoute = (pathname: string) => {
+    const publicRoutes = ['/login', '/', '/about', '/contact'];
+    return !publicRoutes.includes(pathname);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {!(location.pathname.startsWith('/user/dashboard') || location.pathname.startsWith('/admin')) && (
@@ -91,18 +111,20 @@ const AppContent = () => {
         <Route path="/" element={<HomePage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-        <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/user/dashboard" element={
           <ProtectedRoute>
             <UserDashboard logout={handleLogout} />
           </ProtectedRoute>
         } />
         <Route path="/subscription" element={<SubscriptionPage />} />
+        <Route path="/plan-detail" element={<PlanDetail />} />
+        <Route path="/for-schools" element={<ForSchools />} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/*" element={
-          <AdminProtectedRoute>
+          <ProtectedAdminRoute>
             <Routes>
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="users/manage-users" element={<ManageUsers userType="user" />} />
@@ -116,13 +138,16 @@ const AppContent = () => {
               <Route path="topics" element={<ManageTopics />} />
               <Route path="topics/create" element={<CreateTopic />} />
               <Route path="topics/edit/:id" element={<EditTopic />} />
+              <Route path="sections" element={<ManageSections />} />
+              <Route path="sections/create" element={<CreateSection />} />
               <Route path="questions/edit/:id" element={<EditQuestion />} />
-              <Route path="subscriptions/plans" element={<ManagePlans />} />
-              <Route path="subscriptions/subscribers" element={<ManageSubscribers />} />
+              <Route path="school-requests" element={<SchoolRequests />} />
               <Route path="settings/website" element={<WebsiteSettings />} />
               <Route path="settings/account" element={<AccountSettings />} />
+              <Route path="subscriptions/plans" element={<ManagePlans />} />
+              <Route path="subscriptions/subscribers" element={<ManageSubscribers />} />
             </Routes>
-          </AdminProtectedRoute>
+          </ProtectedAdminRoute>
         } />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/user/learning/maths" element={
@@ -175,21 +200,38 @@ const AppContent = () => {
           } 
         />
         <Route 
-          path="/quiz/:topicId" 
-          element={<TopicQuizPage logout={handleLogout} />} 
+          path="/topic/:topicId/sections" 
+          element={
+            <ProtectedRoute>
+              <SectionListingPage logout={handleLogout} />
+            </ProtectedRoute>
+          } 
         />
+        <Route 
+          path="/quiz/:topicId/section/:sectionId" 
+          element={
+            <ProtectedRoute>
+              <TopicQuizPage logout={handleLogout} />
+            </ProtectedRoute>
+          } 
+        />
+        {/* Catch-all route to redirect unknown paths to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };
 
 // Main App component
-function App() {
+const App = () => {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
-}
+};
 
 export default App;

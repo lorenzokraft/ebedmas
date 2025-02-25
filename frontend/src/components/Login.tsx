@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -11,6 +11,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +19,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      console.log('Attempting login for:', email);
+      
+      const response = await fetch('http://localhost:5000/api/users/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,18 +29,46 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email, password }),
       });
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server error: Please try again later");
+      }
+
       const data = await response.json();
+      console.log('Login response:', { ...data, token: data.token ? '***' : null });
 
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
       }
 
-      localStorage.setItem('token', data.token);
+      if (!data.token) {
+        throw new Error('No token received from server');
+      }
+
+      // Validate token format
+      if (!data.token.startsWith('eyJ')) {
+        throw new Error('Invalid token format received');
+      }
+
+      // Clear any existing auth data
+      localStorage.clear(); // Clear all auth-related data
+
+      // Store new auth data
+      localStorage.setItem('token', data.token.trim());
       localStorage.setItem('user', JSON.stringify(data.user));
+      console.log('Token stored:', data.token.substring(0, 10) + '...');
+      
+      console.log('Successfully stored auth data');
       onLoginSuccess();
-      navigate('/user/dashboard');
+
+      // Get the redirect path from location state or use default
+      const redirectPath = location.state?.from?.pathname || '/user/dashboard';
+      console.log('Redirecting to:', redirectPath);
+      navigate(redirectPath);
+      
     } catch (error: any) {
-      setError(error.message || 'Login failed');
+      console.error('Login error:', error);
+      setError(error.message || 'Unable to connect to server. Please try again later.');
     } finally {
       setIsLoading(false);
     }
@@ -168,4 +199,4 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   );
 };
 
-export default Login; 
+export default Login;

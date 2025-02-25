@@ -10,8 +10,8 @@ const api = axios.create({
 // Add request interceptor to include auth token
 api.interceptors.request.use(
   (config) => {
-    // Check if it's an admin route
-    const isAdminRoute = config.url?.startsWith('/admin');
+    // Check if it's an admin route or quote-requests
+    const isAdminRoute = config.url?.startsWith('/admin') || config.url?.includes('quote-requests');
     const token = isAdminRoute 
       ? localStorage.getItem('adminToken')
       : localStorage.getItem('token');
@@ -38,4 +38,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api; 
+export default api;

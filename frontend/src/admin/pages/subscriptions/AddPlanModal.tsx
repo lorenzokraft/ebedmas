@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, Plus, Minus } from 'lucide-react';
 import api from '../../services/api';
 import Swal from 'sweetalert2';
@@ -10,13 +11,36 @@ interface AddPlanModalProps {
 }
 
 const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
   const [durationUnit, setDurationUnit] = useState<'day' | 'month' | 'year'>('month');
+  const [packageType, setPackageType] = useState<'all_access' | 'combo' | 'single'>('all_access');
+  const [subjects, setSubjects] = useState<string[]>(['Maths', 'English', 'Science']);
+  const [yearlyDiscountPercentage, setYearlyDiscountPercentage] = useState('30');
+  const [additionalChildDiscountPercentage, setAdditionalChildDiscountPercentage] = useState('50');
   const [features, setFeatures] = useState<string[]>(['']);
   const [loading, setLoading] = useState(false);
+
+  // Update price when package type changes
+  useEffect(() => {
+    switch (packageType) {
+      case 'all_access':
+        setPrice('22.00');
+        setSubjects(['Maths', 'English', 'Science']);
+        break;
+      case 'combo':
+        setPrice('16.50');
+        setSubjects(['Maths', 'English']);
+        break;
+      case 'single':
+        setPrice('11.00');
+        setSubjects(['Maths']);
+        break;
+    }
+  }, [packageType]);
 
   const handleAddFeature = () => {
     setFeatures([...features, '']);
@@ -59,7 +83,12 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
         price: parseFloat(price),
         duration: parseInt(duration),
         duration_unit: durationUnit,
-        features: processedFeatures
+        package_type: packageType,
+        subjects,
+        yearly_discount_percentage: parseInt(yearlyDiscountPercentage),
+        additional_child_discount_percentage: parseInt(additionalChildDiscountPercentage),
+        features: processedFeatures,
+        is_subscription_plan: false
       };
 
       // Log the data being sent
@@ -76,6 +105,12 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
       });
 
       onSuccess();
+      // Navigate to plan detail page with the new plan
+      navigate('/plan-detail', { 
+        state: { 
+          selectedPlan: response.data
+        } 
+      });
       onClose();
       resetForm();
     } catch (error: any) {
@@ -103,6 +138,10 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
     setPrice('');
     setDuration('');
     setDurationUnit('month');
+    setPackageType('all_access');
+    setSubjects(['Maths', 'English', 'Science']);
+    setYearlyDiscountPercentage('30');
+    setAdditionalChildDiscountPercentage('50');
     setFeatures(['']);
   };
 
@@ -149,10 +188,44 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price ($)
+                Package Type
+              </label>
+              <select
+                value={packageType}
+                onChange={(e) => setPackageType(e.target.value as 'all_access' | 'combo' | 'single')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all_access">All Access</option>
+                <option value="combo">Combo</option>
+                <option value="single">Single Subject</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subjects
+              </label>
+              <select
+                multiple
+                value={subjects}
+                onChange={(e) => setSubjects(Array.from(e.target.selectedOptions, option => option.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="Maths">Maths</option>
+                <option value="English">English</option>
+                <option value="Science">Science</option>
+              </select>
+              <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple subjects</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Base Price ($)
               </label>
               <input
                 type="number"
@@ -166,36 +239,68 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration
-                </label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  required
-                  min="1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="1"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duration
+              </label>
+              <input
+                type="number"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                required
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="1"
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit
-                </label>
-                <select
-                  value={durationUnit}
-                  onChange={(e) => setDurationUnit(e.target.value as 'day' | 'month' | 'year')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="day">Day(s)</option>
-                  <option value="month">Month(s)</option>
-                  <option value="year">Year(s)</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unit
+              </label>
+              <select
+                value={durationUnit}
+                onChange={(e) => setDurationUnit(e.target.value as 'day' | 'month' | 'year')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="day">Day(s)</option>
+                <option value="month">Month(s)</option>
+                <option value="year">Year(s)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Yearly Discount (%)
+              </label>
+              <input
+                type="number"
+                value={yearlyDiscountPercentage}
+                onChange={(e) => setYearlyDiscountPercentage(e.target.value)}
+                min="0"
+                max="100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+              <p className="text-sm text-gray-500 mt-1">Discount applied for yearly subscriptions</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Additional Child Discount (%)
+              </label>
+              <input
+                type="number"
+                value={additionalChildDiscountPercentage}
+                onChange={(e) => setAdditionalChildDiscountPercentage(e.target.value)}
+                min="0"
+                max="100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+              <p className="text-sm text-gray-500 mt-1">Discount for each additional child</p>
             </div>
           </div>
 
@@ -235,4 +340,4 @@ const AddPlanModal = ({ isOpen, onClose, onSuccess }: AddPlanModalProps) => {
   );
 };
 
-export default AddPlanModal; 
+export default AddPlanModal;

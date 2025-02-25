@@ -3,7 +3,7 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import DashboardNav from './DashboardNav';
 import PracticeChart from './PracticeChart';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface UserData {
   id: number;
@@ -21,33 +21,41 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentDate] = useState(new Date());
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          setUserData(JSON.parse(storedUser));
-        }
-
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('token')?.trim();
+        
         if (!token) {
-          throw new Error('No token found');
+          console.error('No token found in storage');
+          navigate('/login');
+          return;
         }
 
-        const response = await axios.get('http://localhost:5000/api/user/profile', {
+        console.log('Making API request with token:', token.substring(0, 10) + '...');
+        
+        const response = await axios.get('http://localhost:5000/api/users/profile', {
           headers: {
-            Authorization: `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
         });
 
-        if (response.data.user) {
-          setUserData(response.data.user);
-          localStorage.setItem('user', JSON.stringify(response.data.user));
+        if (response.data) {
+          setUserData(response.data);
         }
-      } catch (error) {
-        if (!userData) {
-          setError('Failed to load user data');
+      } catch (error: any) {
+        console.error('Error fetching user data:', {
+          status: error.response?.status,
+          message: error.response?.data?.message
+        });
+        
+        if (error.response?.status === 403) {
+          console.log('Token invalid or expired, redirecting to login');
+          localStorage.removeItem('token'); // Clear invalid token
+          navigate('/login');
         }
       } finally {
         setLoading(false);
@@ -55,7 +63,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
     };
 
     fetchUserData();
-  }, []);
+  }, [navigate]);
 
   const renderSubjectSection = (subject: string) => {
     const subjectData = subjects.find(s => s.name.toLowerCase() === subject.toLowerCase());
@@ -189,4 +197,4 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
   );
 };
 
-export default UserDashboard; 
+export default UserDashboard;

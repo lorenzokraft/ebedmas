@@ -1,17 +1,7 @@
 import { Request, Response } from 'express';
-import pool from '../utils/db';
+import { pool } from '../db/database';
 import { RowDataPacket } from 'mysql2';
-
-interface Plan extends RowDataPacket {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  duration: number;
-  duration_unit: string;
-  features: string;
-  is_active: boolean;
-}
+import jwt from 'jsonwebtoken';
 
 interface Subscriber extends RowDataPacket {
   id: number;
@@ -22,103 +12,12 @@ interface Subscriber extends RowDataPacket {
   plan_name: string;
   start_date: Date;
   end_date: Date;
+  trial_end_date: Date;
   status: string;
   card_last_four: string;
   card_holder_name: string;
   auto_renew: boolean;
 }
-
-// Get all subscription plans
-const getPlans = async (req: Request, res: Response) => {
-  try {
-    const [plans] = await pool.query<Plan[]>(
-      'SELECT * FROM subscription_plans ORDER BY price ASC'
-    );
-    
-    const processedPlans = processPlansFeatures(plans);
-    res.json(processedPlans);
-  } catch (error) {
-    console.error('Error fetching plans:', error);
-    res.status(500).json({ message: 'Failed to fetch subscription plans' });
-  }
-};
-
-// Create new subscription plan
-const createPlan = async (req: Request, res: Response) => {
-  try {
-    const { name, description, price, duration, duration_unit, features } = req.body;
-    
-    // Log the incoming data
-    console.log('Creating plan with data:', {
-      name,
-      description,
-      price,
-      duration,
-      duration_unit,
-      features
-    });
-
-    // Validate required fields
-    if (!name || !description || !price || !duration || !duration_unit || !features) {
-      return res.status(400).json({ 
-        message: 'All fields are required',
-        received: { name, description, price, duration, duration_unit, features }
-      });
-    }
-
-    // Process features
-    const processedFeatures = Array.isArray(features) 
-      ? features.join('\n')
-      : typeof features === 'string'
-        ? features
-        : '';
-
-    // Log processed features
-    console.log('Processed features:', processedFeatures);
-
-    const [result] = await pool.query(
-      'INSERT INTO subscription_plans (name, description, price, duration, duration_unit, features, is_active) VALUES (?, ?, ?, ?, ?, ?, true)',
-      [name, description, price, duration, duration_unit, processedFeatures]
-    );
-
-    res.status(201).json({ 
-      message: 'Plan created successfully',
-      plan: {
-        name,
-        description,
-        price,
-        duration,
-        duration_unit,
-        features: processedFeatures
-      }
-    });
-  } catch (error) {
-    console.error('Detailed error creating plan:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available');
-    res.status(500).json({ 
-      message: 'Failed to create subscription plan',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
-
-// Update plan status
-const updatePlanStatus = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { is_active } = req.body;
-
-    await pool.query(
-      'UPDATE subscription_plans SET is_active = ? WHERE id = ?',
-      [is_active, id]
-    );
-
-    res.json({ message: 'Plan status updated successfully' });
-  } catch (error) {
-    console.error('Error updating plan status:', error);
-    res.status(500).json({ message: 'Failed to update plan status' });
-  }
-};
 
 // Get all subscribers
 const getSubscribers = async (req: Request, res: Response) => {
@@ -169,78 +68,347 @@ const toggleSubscriptionFreeze = async (req: Request, res: Response) => {
   }
 };
 
-// Get public plans
-const getPublicPlans = async (req: Request, res: Response) => {
+// Get default pricing
+const getDefaultPricing = async (req: Request, res: Response) => {
   try {
-    const [plans] = await pool.query<Plan[]>(
-      'SELECT * FROM subscription_plans WHERE is_active = true ORDER BY price ASC'
-    );
-    
-    const processedPlans = processPlansFeatures(plans);
-    res.json(processedPlans);
-  } catch (error) {
-    console.error('Error fetching public plans:', error);
-    res.status(500).json({ message: 'Failed to fetch subscription plans' });
-  }
-};
-
-// Add these controller methods
-const updatePlan = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { name, description, price, duration, duration_unit, features } = req.body;
-
-    // Store features as a newline-separated string
-    const processedFeatures = Array.isArray(features) 
-      ? features.join('\n')
-      : features;
-
-    await pool.query(
-      'UPDATE subscription_plans SET name = ?, description = ?, price = ?, duration = ?, duration_unit = ?, features = ? WHERE id = ?',
-      [name, description, price, duration, duration_unit, processedFeatures, id]
+    // Use a simple SELECT that works in both MySQL 8.3 and MariaDB 10.6
+    const [result] = await pool.query(
+      'SELECT value FROM subscription_settings WHERE name = ?',
+      ['default_pricing']
     );
 
-    res.json({ message: 'Plan updated successfully' });
-  } catch (error) {
-    console.error('Error updating plan:', error);
-    res.status(500).json({ message: 'Failed to update plan' });
-  }
-};
-
-const deletePlan = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    await pool.query('DELETE FROM subscription_plans WHERE id = ?', [id]);
-    res.json({ message: 'Plan deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting plan:', error);
-    res.status(500).json({ message: 'Failed to delete plan' });
-  }
-};
-
-const processPlansFeatures = (plans: Plan[]) => {
-  return plans.map(plan => {
-    let features = plan.features;
-    
-    // If features is a string, split it by newlines
-    if (typeof features === 'string') {
-      features = features.split('\n').map(f => f.trim()).filter(Boolean);
+    if (!result || !result[0]) {
+      return res.status(404).json({ error: 'Pricing settings not found' });
     }
+
+    let pricing;
+    try {
+      // Handle both string and already-parsed JSON (MariaDB might return it differently)
+      pricing = typeof result[0].value === 'string' 
+        ? JSON.parse(result[0].value) 
+        : result[0].value;
+    } catch (e) {
+      return res.status(500).json({ error: 'Invalid JSON in database' });
+    }
+
+    // Ensure the pricing is an array
+    if (!Array.isArray(pricing)) {
+      return res.status(500).json({ error: 'Invalid pricing format in database' });
+    }
+
+    const formattedPricing = pricing.map((plan: any) => {
+      // Helper function to parse price strings and convert to proper Naira values
+      const parseNairaAmount = (value: any): number => {
+        if (!value) return 0;
+        const numValue = parseFloat(value.toString());
+        // If the value is less than 1, it might be in decimal format (e.g., 0.05 for ₦5)
+        return numValue < 1 ? Math.round(numValue * 100) : numValue;
+      };
+
+      return {
+        ...plan,
+        // Ensure all numeric fields are properly parsed
+        monthlyPrice: parseInt(plan.monthlyPrice?.toString() || '0'),
+        yearlyPrice: parseInt(plan.yearlyPrice?.toString() || '0'),
+        yearlyDiscountPercentage: parseInt(plan.yearlyDiscountPercentage?.toString() || '0'),
+        // Use parseNairaAmount for discount amounts to handle decimal values
+        monthlyAdditionalChildDiscountAmount: parseNairaAmount(plan.monthlyAdditionalChildDiscountAmount),
+        yearlyAdditionalChildDiscountAmount: parseNairaAmount(plan.yearlyAdditionalChildDiscountAmount),
+        // Ensure subjects is always an array
+        subjects: Array.isArray(plan.subjects) ? plan.subjects : []
+      };
+    });
+
+    res.json(formattedPricing);
+  } catch (error) {
+    console.error('Error fetching default pricing:', error);
+    res.status(500).json({ error: 'Failed to fetch default pricing' });
+  }
+};
+
+// Update default pricing
+const updateDefaultPricing = async (req: Request, res: Response) => {
+  try {
+    const pricingData = req.body;
+    console.log('Received pricing data:', pricingData);
     
-    return {
+    // Validate the pricing data structure
+    if (!Array.isArray(pricingData)) {
+      console.log('Invalid data format - not an array:', pricingData);
+      return res.status(400).json({ message: 'Invalid pricing data format. Expected an array.' });
+    }
+
+    // Validate each plan in the pricing data
+    for (const plan of pricingData) {
+      if (!plan.type || !plan.title || !plan.monthlyPrice || !plan.yearlyPrice) {
+        console.log('Invalid plan data:', plan);
+        return res.status(400).json({ 
+          message: 'Each plan must have type, title, monthlyPrice, and yearlyPrice',
+          invalidPlan: plan
+        });
+      }
+    }
+
+    // Update the settings in the database
+    await pool.query(
+      'UPDATE subscription_settings SET value = ? WHERE name = ?',
+      [JSON.stringify(pricingData), 'default_pricing']
+    );
+
+    res.json({ 
+      message: 'Default pricing updated successfully',
+      updatedPricing: pricingData
+    });
+  } catch (error) {
+    console.error('Error updating default pricing:', error);
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+// Update additional child discount
+const updateAdditionalChildDiscount = async (req: Request, res: Response) => {
+  try {
+    const { discountAmount } = req.body;
+    
+    if (typeof discountAmount !== 'number' || discountAmount < 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid discount amount. Must be a positive number.' 
+      });
+    }
+
+    // Get current pricing
+    const [result] = await pool.query(
+      'SELECT value FROM subscription_settings WHERE name = ?',
+      ['default_pricing']
+    );
+
+    if (!result || !result[0]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pricing settings not found'
+      });
+    }
+
+    const currentPricing = JSON.parse(result[0].value);
+    
+    // Update the discount amount for each plan
+    const updatedPricing = currentPricing.map((plan: any) => ({
       ...plan,
-      features
-    };
-  });
+      monthlyAdditionalChildDiscountAmount: discountAmount,
+      yearlyAdditionalChildDiscountAmount: discountAmount
+    }));
+
+    // Update the database - Using a simple UPDATE query that works in both MySQL 8 and MariaDB
+    await pool.query(
+      'UPDATE subscription_settings SET value = ? WHERE name = ?',
+      [JSON.stringify(updatedPricing), 'default_pricing']
+    );
+
+    res.json({
+      success: true,
+      message: 'Additional child discount updated successfully',
+      data: { discountAmount }
+    });
+  } catch (error) {
+    console.error('Error updating additional child discount:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update additional child discount'
+    });
+  }
+};
+
+// Update pricing structure
+const updatePricingStructure = async (req: Request, res: Response) => {
+  try {
+    const pricingCards = req.body;
+    
+    // Validate input
+    if (!Array.isArray(pricingCards)) {
+      return res.status(400).json({ error: 'Invalid input format' });
+    }
+
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+
+      // Format the pricing cards for JSON storage
+      const formattedCards = pricingCards.map(card => ({
+        id: card.id,
+        title: card.title,
+        description: card.description,
+        subjects: Array.isArray(card.subjects) ? card.subjects : [],
+        monthlyPrice: parseInt(card.monthlyPrice.toString()),
+        yearlyPrice: parseInt(card.yearlyPrice.toString()),
+        type: card.type,
+        yearlyDiscountPercentage: parseInt(card.yearlyDiscountPercentage.toString()),
+        monthlyAdditionalChildDiscountAmount: parseInt(card.monthlyAdditionalChildDiscountAmount.toString()),
+        yearlyAdditionalChildDiscountAmount: parseInt(card.yearlyAdditionalChildDiscountAmount.toString())
+      }));
+
+      // Validate JSON string before updating
+      const jsonString = JSON.stringify(formattedCards);
+      JSON.parse(jsonString); // This will throw if invalid JSON
+
+      // Use a parameterized query that works in both MySQL 8.3 and MariaDB 10.6
+      const query = `
+        UPDATE subscription_settings 
+        SET value = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE name = 'default_pricing'
+      `;
+
+      await connection.query(query, [jsonString]);
+      await connection.commit();
+      res.json({ message: 'Pricing structure updated successfully' });
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof SyntaxError) {
+        res.status(400).json({ error: 'Invalid JSON format' });
+      } else {
+        throw error;
+      }
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Error updating pricing structure:', error);
+    res.status(500).json({ error: 'Failed to update pricing structure' });
+  }
+};
+
+// Create a new subscription with trial
+const createTrialSubscription = async (req: Request, res: Response) => {
+  const { plan_type, email, username, reference, card_last_four, billing_cycle, children_count, selected_subject, amount_paid } = req.body;
+  
+  try {
+    // First, check if user exists or create new user
+    const [existingUsers] = await pool.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
+
+    let userId;
+    if (existingUsers && existingUsers[0]) {
+      userId = existingUsers[0].id;
+    } else {
+      // Create new user with a temporary password (they can reset it later)
+      const tempPassword = Math.random().toString(36).slice(-8);
+      const [newUser] = await pool.query(
+        'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
+        [username, email, tempPassword]
+      );
+      userId = newUser.insertId;
+    }
+
+    const trialDays = 7;
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + trialDays);
+    
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 1);
+
+    const [result] = await pool.query(
+      `INSERT INTO subscriptions 
+       (user_id, plan_type, billing_cycle, children_count, selected_subject, 
+        amount_paid, payment_reference, status, start_date, end_date) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'trial', ?, ?)`,
+      [userId, plan_type, billing_cycle, children_count, selected_subject, 
+       amount_paid, reference, startDate, endDate]
+    );
+
+    // Update user's subscription status
+    await pool.query(
+      'UPDATE users SET isSubscribed = ? WHERE id = ?',
+      [true, userId]
+    );
+
+    // Schedule the trial end check
+    await scheduleTrialEndCheck(result.insertId, trialEndDate);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: userId, email, role: 'user' },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    res.json({ 
+      message: 'Trial subscription created successfully',
+      trial_end_date: trialEndDate,
+      user_id: userId,
+      token
+    });
+  } catch (error) {
+    console.error('Error creating trial subscription:', error);
+    res.status(500).json({ 
+      message: 'Failed to create trial subscription', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// Cancel subscription
+const cancelSubscription = async (req: Request, res: Response) => {
+  const { subscription_id } = req.params;
+  
+  try {
+    await pool.query(
+      'UPDATE subscriptions SET status = ?, auto_renew = false WHERE id = ?',
+      ['cancelled', subscription_id]
+    );
+
+    res.json({ message: 'Subscription cancelled successfully' });
+  } catch (error) {
+    console.error('Error cancelling subscription:', error);
+    res.status(500).json({ message: 'Failed to cancel subscription' });
+  }
+};
+
+// Check if trial has ended and process payment
+const checkTrialEnd = async (subscription_id: number) => {
+  try {
+    const [subscription] = await pool.query<Subscriber[]>(
+      'SELECT * FROM subscriptions WHERE id = ? AND status = ?',
+      [subscription_id, 'trial']
+    );
+
+    if (!subscription[0]) return;
+
+    const trialEndDate = new Date(subscription[0].trial_end_date);
+    if (new Date() >= trialEndDate && subscription[0].auto_renew) {
+      // Trial has ended and subscription wasn't cancelled
+      // Initiate Paystack charge using saved card
+      // Update subscription status to 'active'
+      await pool.query(
+        'UPDATE subscriptions SET status = ? WHERE id = ?',
+        ['active', subscription_id]
+      );
+    }
+  } catch (error) {
+    console.error('Error checking trial end:', error);
+  }
+};
+
+// Helper function to schedule trial end check
+const scheduleTrialEndCheck = async (subscription_id: number, trial_end_date: Date) => {
+  const timeUntilTrialEnd = trial_end_date.getTime() - new Date().getTime();
+  setTimeout(() => checkTrialEnd(subscription_id), timeUntilTrialEnd);
 };
 
 export {
-  getPlans,
-  createPlan,
-  updatePlanStatus,
   getSubscribers,
   toggleSubscriptionFreeze,
-  getPublicPlans,
-  updatePlan,
-  deletePlan
-}; 
+  getDefaultPricing,
+  updateDefaultPricing,
+  updateAdditionalChildDiscount,
+  updatePricingStructure,
+  createTrialSubscription,
+  cancelSubscription
+};

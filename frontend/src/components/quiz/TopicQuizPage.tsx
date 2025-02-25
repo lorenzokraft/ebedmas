@@ -68,12 +68,20 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
           
           // Process options if they exist
           let processedOptions = [];
-          if (question.type === 'click' && question.options) {
+          if (question.options) {
             try {
               if (typeof question.options === 'string') {
-                processedOptions = JSON.parse(question.options);
+                processedOptions = JSON.parse(question.options).map((opt: any) => ({
+                  id: opt.id || Math.random(),
+                  text: typeof opt === 'object' ? opt.text : opt,
+                  isCorrect: opt.isCorrect || false
+                }));
               } else if (Array.isArray(question.options)) {
-                processedOptions = question.options;
+                processedOptions = question.options.map((opt: any) => ({
+                  id: opt.id || Math.random(),
+                  text: typeof opt === 'object' ? opt.text : opt,
+                  isCorrect: opt.isCorrect || false
+                }));
               }
               console.log('Processed options:', processedOptions);
             } catch (e) {
@@ -302,9 +310,8 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
       setIsCorrect(null);
       
       // Reset drag items for next question if it's a drag type
-      if (questions[currentQuestionIndex + 1]?.type === 'drag') {
-        const numbers = questions[currentQuestionIndex + 1].correctAnswer.split(',');
-        setDragItems(numbers);
+      if (questions[currentQuestionIndex + 1]?.type === 'drag' && questions[currentQuestionIndex + 1].options) {
+        setDragItems(questions[currentQuestionIndex + 1].options.map(opt => opt.text));
       }
     }
   };

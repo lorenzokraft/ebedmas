@@ -79,11 +79,72 @@ export const createGrade = async (req: AuthenticatedRequest, res: Response) => {
     const { name } = req.body;
     const adminId = req.user.id;
 
-    const [result] = await pool.execute(
-      'INSERT INTO grades (name, created_by) VALUES (?, ?)',
-      [name, adminId]
-    );
-    res.status(201).json({ message: 'Grade created successfully' });
+    // Extract year number from name (e.g., "Year 10" -> 10)
+    let yearNumber: number;
+    if (name.toLowerCase() === 'reception') {
+      yearNumber = 0;
+    } else {
+      const match = name.match(/Year (\d+)/i);
+      if (!match) {
+        return res.status(400).json({ 
+          message: 'Invalid grade name format. Use "Reception" or "Year X" where X is a number.' 
+        });
+      }
+      yearNumber = parseInt(match[1], 10);
+      
+      // Validate year number range
+      if (yearNumber < 1 || yearNumber > 13) {
+        return res.status(400).json({
+          message: 'Year number must be between 1 and 13'
+        });
+      }
+    }
+
+    // Start a transaction to ensure data consistency
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Check if this year already exists
+      const [existing] = await connection.query<RowDataPacket[]>(
+        'SELECT id FROM grades WHERE id = ?',
+        [yearNumber]
+      );
+
+      if (existing && existing.length > 0) {
+        await connection.rollback();
+        return res.status(400).json({ 
+          message: `Year ${yearNumber === 0 ? 'Reception' : yearNumber} already exists` 
+        });
+      }
+
+      // Format the name consistently
+      const formattedName = yearNumber === 0 ? 'Reception' : `Year ${yearNumber}`;
+
+      // Insert with the year number as the ID
+      await connection.execute(
+        'INSERT INTO grades (id, name, created_by, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+        [yearNumber, formattedName, adminId]
+      );
+
+      await connection.commit();
+
+      res.status(201).json({ 
+        message: 'Grade created successfully',
+        grade: {
+          id: yearNumber,
+          name: formattedName,
+          created_by: adminId,
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     console.error('Error creating grade:', error);
     res.status(500).json({ message: 'Failed to create grade' });

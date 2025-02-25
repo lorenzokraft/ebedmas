@@ -11,16 +11,36 @@ const CreateGrade = () => {
   const navigate = useNavigate();
 
   const validateGradeName = (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    
+    // Check for Reception
+    if (normalizedName === 'reception' || normalizedName === 'r') {
+      return true;
+    }
+    
     // Remove any leading "Year" or "Grade" and trim spaces
-    const normalizedName = name.trim().replace(/^(year|grade)\s*/i, '');
+    const cleanName = normalizedName.replace(/^(year|grade)\s*/i, '');
     
     // Check if it's a number between 1 and 13
-    const number = parseInt(normalizedName);
+    const number = parseInt(cleanName);
     if (isNaN(number) || number < 1 || number > 13) {
       return false;
     }
     
     return true;
+  };
+
+  const formatGradeName = (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    
+    // Handle Reception
+    if (normalizedName === 'reception' || normalizedName === 'r') {
+      return 'Reception';
+    }
+    
+    // Extract number and format as "Year X"
+    const number = normalizedName.replace(/^(year|grade)\s*/i, '');
+    return `Year ${number}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,16 +49,18 @@ const CreateGrade = () => {
     if (!validateGradeName(gradeName)) {
       Swal.fire({
         title: 'Invalid Grade',
-        text: 'Please enter a valid grade number between 1 and 13 (e.g., "5" or "Year 5")',
+        text: 'Please enter either "Reception" or a year number between 1 and 13 (e.g., "5" or "Year 5")',
         icon: 'error',
         confirmButtonColor: '#EF4444'
       });
       return;
     }
 
+    const formattedName = formatGradeName(gradeName);
+
     setLoading(true);
     try {
-      const response = await api.post('/api/admin/grades', { name: gradeName });
+      const response = await api.post('/api/admin/grades', { name: formattedName });
       
       if (response.status === 201) {
         await Swal.fire({
@@ -79,11 +101,11 @@ const CreateGrade = () => {
                   value={gradeName}
                   onChange={(e) => setGradeName(e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mt-1"
-                  placeholder="Enter grade number (e.g., 5 or Year 5)"
+                  placeholder="Enter 'Reception' or a year number (e.g., 5 or Year 5)"
                   required
                 />
                 <p className="mt-2 text-sm text-gray-600">
-                  Enter a grade number between 1 and 13. You can optionally prefix with "Year" or "Grade".
+                  Enter either "Reception" or a year number between 1 and 13. You can optionally prefix with "Year".
                 </p>
               </div>
               <div className="flex gap-4">

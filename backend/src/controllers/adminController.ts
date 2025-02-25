@@ -19,7 +19,7 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
-const login = async (req: Request, res: Response) => {
+async function login(req: Request, res: Response) {
   try {
     const { email, password } = req.body;
 
@@ -82,7 +82,7 @@ const login = async (req: Request, res: Response) => {
   }
 };
 
-const getRecentUsers = async (req: Request, res: Response) => {
+async function getRecentUsers(req: Request, res: Response) {
   try {
     console.log('Fetching recent users...'); // Debug log
 
@@ -131,7 +131,7 @@ const getRecentUsers = async (req: Request, res: Response) => {
   }
 };
 
-const getUserCount = async (req: Request, res: Response) => {
+async function getUserCount(req: Request, res: Response) {
   try {
     const [result] = await pool.query<RowDataPacket[]>(
       'SELECT COUNT(*) as count FROM users'
@@ -144,7 +144,7 @@ const getUserCount = async (req: Request, res: Response) => {
   }
 };
 
-const getUsers = async (req: Request, res: Response) => {
+async function getUsers(req: Request, res: Response) {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 15;
@@ -200,7 +200,7 @@ const getUsers = async (req: Request, res: Response) => {
   }
 };
 
-const getGrades = async (req: Request, res: Response) => {
+async function getGrades(req: Request, res: Response) {
   try {
     const adminId = req.user?.id;
     if (!adminId) {
@@ -231,9 +231,7 @@ const getGrades = async (req: Request, res: Response) => {
         ) as total_questions
       FROM grades g 
       LEFT JOIN admin_users au ON g.created_by = au.id 
-      WHERE g.created_by = ?
-      ORDER BY g.name`,
-      [adminId]
+      ORDER BY g.id`,
     ) as [RowDataPacket[], any];
 
     // Get subject stats for each grade
@@ -248,10 +246,8 @@ const getGrades = async (req: Request, res: Response) => {
       CROSS JOIN subjects s
       LEFT JOIN questions q ON q.grade_id = g.id AND q.subject_id = s.id
       LEFT JOIN topics t ON q.topic_id = t.id
-      WHERE g.created_by = ?
       GROUP BY g.id, s.id, s.name
-      ORDER BY g.name, s.name`,
-      [adminId]
+      ORDER BY g.id, s.name`
     ) as [RowDataPacket[], any];
 
     // Transform the data
@@ -277,7 +273,7 @@ const getGrades = async (req: Request, res: Response) => {
   }
 };
 
-const getSubjects = async (req: Request, res: Response) => {
+async function getSubjects(req: Request, res: Response) {
   try {
     const [subjects] = await pool.query<RowDataPacket[]>(
       `SELECT 
@@ -300,7 +296,7 @@ const getSubjects = async (req: Request, res: Response) => {
   }
 };
 
-const getTopicsBySubject = async (req: Request, res: Response) => {
+async function getTopicsBySubject(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const [topics] = await pool.query(
@@ -314,7 +310,7 @@ const getTopicsBySubject = async (req: Request, res: Response) => {
   }
 };
 
-const createQuestion = async (req: Request, res: Response) => {
+async function createQuestion(req: Request, res: Response) {
   try {
     console.log('Request body:', req.body);
     console.log('Request files:', req.files);
@@ -328,11 +324,25 @@ const createQuestion = async (req: Request, res: Response) => {
       grade_id,
       subject_id,
       topic_id,
+      section_id,
       order_num,
       audio_url
     } = req.body;
 
     const adminId = (req as AuthenticatedRequest).user?.id;
+
+    // Generate a slug from the question text
+    const generateSlug = (text: string): string => {
+      return text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric chars with hyphens
+        .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+        .substring(0, 50) + // Limit length
+        '-' +
+        Date.now(); // Add timestamp to ensure uniqueness
+    };
+
+    const slug = generateSlug(question_text);
 
     // Validate question type
     const validTypes = ['text', 'draw', 'paint', 'drag', 'click'];
@@ -343,15 +353,16 @@ const createQuestion = async (req: Request, res: Response) => {
     }
 
     // Validate required fields
-    if (!question_text || !correct_answer || !grade_id || !subject_id || !topic_id) {
+    if (!question_text || !correct_answer || !grade_id || !subject_id || !topic_id || !section_id) {
       return res.status(400).json({ 
         message: 'Missing required fields',
         receivedFields: {
-          question_text,
-          correct_answer,
-          grade_id,
-          subject_id,
-          topic_id
+          question_text: !!question_text,
+          correct_answer: !!correct_answer,
+          grade_id: !!grade_id,
+          subject_id: !!subject_id,
+          topic_id: !!topic_id,
+          section_id: !!section_id
         }
       });
     }
@@ -380,25 +391,38 @@ const createQuestion = async (req: Request, res: Response) => {
     // Parse and validate options
     let formattedOptions;
     try {
-      // If options is a string, try to parse it
+      // Parse options if it's a string
       const parsedOptions = typeof options === 'string' ? JSON.parse(options) : options;
       
       // Ensure it's an array
-      formattedOptions = Array.isArray(parsedOptions) ? parsedOptions : [parsedOptions];
-
-      // For click-type questions, ensure options are properly formatted
-      if (question_type === 'click') {
-        formattedOptions = formattedOptions.map((opt: string) => opt.trim());
+      if (!Array.isArray(parsedOptions)) {
+        throw new Error('Options must be an array');
       }
+
+      // Validate each option object
+      formattedOptions = parsedOptions.map(opt => {
+        if (typeof opt !== 'object' || !opt.text) {
+          throw new Error('Each option must be an object with a text property');
+        }
+        return {
+          id: opt.id || 0,
+          text: opt.text.trim(),
+          isCorrect: opt.isCorrect || false
+        };
+      });
 
       // Convert to string for storage
       formattedOptions = JSON.stringify(formattedOptions);
     } catch (error) {
-      console.error('Error parsing options:', error, { options });
+      console.error('Error parsing options:', error, { 
+        receivedOptions: options,
+        questionType: question_type 
+      });
       return res.status(400).json({ 
         message: 'Invalid options format',
         error: error instanceof Error ? error.message : 'Unknown error',
-        receivedOptions: options
+        receivedOptions: options,
+        questionType: question_type
       });
     }
 
@@ -411,12 +435,26 @@ const createQuestion = async (req: Request, res: Response) => {
       grade_id,
       subject_id,
       topic_id,
+      section_id,
       order_num,
       adminId,
       audio_url,
       images: imagesArray,
-      explanation_image
+      explanation_image,
+      slug
     });
+
+    // Verify section exists and belongs to the topic
+    const [sectionCheck] = await pool.query<RowDataPacket[]>(
+      'SELECT id FROM sections WHERE id = ? AND topic_id = ?',
+      [section_id, topic_id]
+    );
+
+    if (!sectionCheck || sectionCheck.length === 0) {
+      return res.status(400).json({
+        message: 'Invalid section_id or section does not belong to the selected topic'
+      });
+    }
 
     // Insert question into database
     const [result] = await pool.query<ResultSetHeader>(
@@ -429,12 +467,14 @@ const createQuestion = async (req: Request, res: Response) => {
         grade_id,
         subject_id,
         topic_id,
+        section_id,
         order_num,
         created_by,
         audio_url,
         images,
-        explanation_image
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        explanation_image,
+        slug
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         question_text,
         question_type,
@@ -444,17 +484,19 @@ const createQuestion = async (req: Request, res: Response) => {
         grade_id,
         subject_id,
         topic_id,
+        section_id,
         order_num || 0,
         adminId,
         audio_url || null,
         imagesArray ? JSON.stringify(imagesArray) : null,
-        explanation_image
+        explanation_image,
+        slug
       ]
     );
 
     res.status(201).json({
       message: 'Question created successfully',
-      questionId: (result as ResultSetHeader).insertId
+      questionId: result.insertId
     });
   } catch (error) {
     console.error('Error creating question:', error);
@@ -469,7 +511,7 @@ const createQuestion = async (req: Request, res: Response) => {
   }
 };
 
-const createTopic = async (req: Request, res: Response) => {
+async function createTopic(req: Request, res: Response) {
   try {
     const { name, description, subject_id, grade_id } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -510,7 +552,7 @@ const createTopic = async (req: Request, res: Response) => {
   }
 };
 
-const getAllTopics = async (req: Request, res: Response) => {
+async function getAllTopics(req: Request, res: Response) {
   try {
     const [topics] = await pool.query<RowDataPacket[]>(
       `SELECT 
@@ -540,7 +582,7 @@ const getAllTopics = async (req: Request, res: Response) => {
   }
 };
 
-const deleteTopic = async (req: Request, res: Response) => {
+async function deleteTopic(req: Request, res: Response) {
   try {
     const { id } = req.params;
 
@@ -567,7 +609,7 @@ const deleteTopic = async (req: Request, res: Response) => {
   }
 };
 
-const getTopicById = async (req: Request, res: Response) => {
+async function getTopicById(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -601,7 +643,7 @@ const getTopicById = async (req: Request, res: Response) => {
   }
 };
 
-const updateTopic = async (req: Request, res: Response) => {
+async function updateTopic(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name, subject_id, grade_id } = req.body;
@@ -629,7 +671,7 @@ const updateTopic = async (req: Request, res: Response) => {
   }
 };
 
-const createSubject = async (req: Request, res: Response) => {
+async function createSubject(req: Request, res: Response) {
   try {
     const { name } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -660,7 +702,7 @@ const createSubject = async (req: Request, res: Response) => {
   }
 };
 
-const updateSubject = async (req: Request, res: Response) => {
+async function updateSubject(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -689,7 +731,7 @@ const updateSubject = async (req: Request, res: Response) => {
   }
 };
 
-const deleteSubject = async (req: Request, res: Response) => {
+async function deleteSubject(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -718,7 +760,7 @@ const deleteSubject = async (req: Request, res: Response) => {
   }
 };
 
-const createGrade = async (req: Request, res: Response) => {
+async function createGrade(req: Request, res: Response) {
   try {
     const { name } = req.body;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -727,31 +769,53 @@ const createGrade = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Grade name is required' });
     }
 
-    // Normalize the grade name to ensure consistent format (e.g., "Year 5")
-    const normalizedName = name.trim().replace(/^(year|grade)\s*/i, '');
-    const formattedName = `Year ${normalizedName}`;
+    // Extract year number and format name
+    let yearId: number;
+    let formattedName: string;
 
-    // Check if grade already exists (case-insensitive)
+    if (name.toLowerCase().includes('reception') || name.toLowerCase() === 'r') {
+      yearId = 0;
+      formattedName = 'Reception';
+    } else {
+      // Remove any "Year" or "Grade" prefix and trim spaces
+      const normalizedName = name.trim().replace(/^(year|grade)\s*/i, '');
+      const yearNumber = parseInt(normalizedName);
+
+      // Validate year number
+      if (isNaN(yearNumber) || yearNumber < 1 || yearNumber > 13) {
+        return res.status(400).json({
+          message: 'Invalid year number. Please enter Reception or a number between 1 and 13.'
+        });
+      }
+
+      yearId = yearNumber;
+      formattedName = `Year ${yearNumber}`;
+    }
+
+    // Check if grade already exists
     const [existingGrades] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM grades WHERE LOWER(name) = LOWER(?)',
-      [formattedName]
+      'SELECT id FROM grades WHERE id = ?',
+      [yearId]
     );
 
     if (existingGrades.length > 0) {
       return res.status(400).json({
-        message: `Grade "${formattedName}" already exists`
+        message: `${formattedName} already exists`
       });
     }
 
-    // Insert the new grade
+    // Insert the new grade with the specific ID
     const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO grades (name, created_by) VALUES (?, ?)',
-      [formattedName, adminId]
+      'INSERT INTO grades (id, name, created_by) VALUES (?, ?, ?)',
+      [yearId, formattedName, adminId]
     );
 
     res.status(201).json({
       message: 'Grade created successfully',
-      gradeId: result.insertId
+      grade: {
+        id: yearId,
+        name: formattedName
+      }
     });
   } catch (error) {
     console.error('Error creating grade:', error);
@@ -762,7 +826,7 @@ const createGrade = async (req: Request, res: Response) => {
   }
 };
 
-const updateGrade = async (req: Request, res: Response) => {
+async function updateGrade(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -791,7 +855,7 @@ const updateGrade = async (req: Request, res: Response) => {
   }
 };
 
-const deleteGrade = async (req: Request, res: Response) => {
+async function deleteGrade(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -817,7 +881,7 @@ const deleteGrade = async (req: Request, res: Response) => {
   }
 };
 
-const getQuestions = async (req: Request, res: Response) => {
+async function getQuestions(req: Request, res: Response) {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -863,6 +927,7 @@ const getQuestions = async (req: Request, res: Response) => {
     const formattedQuestions = questions.map(q => {
       let parsedOptions = [];
       try {
+        // If options is a string with commas, split it
         if (typeof q.options === 'string' && q.options.includes(',')) {
           parsedOptions = q.options.split(',').map(opt => opt.trim());
         } else if (typeof q.options === 'string') {
@@ -896,7 +961,7 @@ const getQuestions = async (req: Request, res: Response) => {
   }
 };
 
-const deleteQuestion = async (req: Request, res: Response) => {
+async function deleteQuestion(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -921,7 +986,7 @@ const deleteQuestion = async (req: Request, res: Response) => {
   }
 };
 
-const updateQuestion = async (req: Request, res: Response) => {
+async function updateQuestion(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const {
@@ -933,6 +998,7 @@ const updateQuestion = async (req: Request, res: Response) => {
       grade_id,
       subject_id,
       topic_id,
+      section_id,
       order_num,
       audio_url
     } = req.body;
@@ -976,6 +1042,7 @@ const updateQuestion = async (req: Request, res: Response) => {
         grade_id = ?,
         subject_id = ?,
         topic_id = ?,
+        section_id = ?,
         order_num = ?,
         audio_url = ?,
         question_image = ?
@@ -989,6 +1056,7 @@ const updateQuestion = async (req: Request, res: Response) => {
         grade_id,
         subject_id,
         topic_id,
+        section_id,
         order_num || 0,
         audio_url || null,
         question_image,
@@ -1003,7 +1071,7 @@ const updateQuestion = async (req: Request, res: Response) => {
   }
 };
 
-const getQuestionById = async (req: Request, res: Response) => {
+async function getQuestionById(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -1076,7 +1144,7 @@ const getQuestionById = async (req: Request, res: Response) => {
   }
 };
 
-const getAdmins = async (req: Request, res: Response) => {
+async function getAdmins(req: Request, res: Response) {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -1115,7 +1183,7 @@ const getAdmins = async (req: Request, res: Response) => {
   }
 };
 
-const createAdmin = async (req: Request, res: Response) => {
+async function createAdmin(req: Request, res: Response) {
   try {
     const { name, email, password, role } = req.body;
     const creatorId = (req as AuthenticatedRequest).user?.id;
@@ -1179,7 +1247,7 @@ const createAdmin = async (req: Request, res: Response) => {
   }
 };
 
-const updateAdmin = async (req: Request, res: Response) => {
+async function updateAdmin(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name, email, password, role } = req.body;
@@ -1257,7 +1325,7 @@ const updateAdmin = async (req: Request, res: Response) => {
   }
 };
 
-const deleteAdmin = async (req: Request, res: Response) => {
+async function deleteAdmin(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -1291,7 +1359,7 @@ const deleteAdmin = async (req: Request, res: Response) => {
   }
 };
 
-const updateAdminStatus = async (req: Request, res: Response) => {
+async function updateAdminStatus(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1336,7 +1404,7 @@ const updateAdminStatus = async (req: Request, res: Response) => {
   }
 };
 
-const getAdminById = async (req: Request, res: Response) => {
+async function getAdminById(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const adminId = (req as AuthenticatedRequest).user?.id;
@@ -1378,7 +1446,128 @@ const getAdminById = async (req: Request, res: Response) => {
   }
 };
 
-// Export all functions at once
+// Section Controller Functions
+async function getAllSections(req: Request, res: Response) {
+  try {
+    const [sections] = await pool.query<RowDataPacket[]>(`
+      SELECT 
+        s.*,
+        t.name as topic_name,
+        sub.name as subject_name,
+        g.name as grade_name,
+        u.username as created_by_name
+      FROM sections s
+      JOIN topics t ON s.topic_id = t.id
+      JOIN subjects sub ON t.subject_id = sub.id
+      JOIN grades g ON t.grade_id = g.id
+      JOIN users u ON s.created_by = u.id
+      ORDER BY s.created_at DESC
+    `);
+    res.json(sections);
+  } catch (error) {
+    console.error('Error fetching sections:', error);
+    res.status(500).json({ error: 'Failed to fetch sections' });
+  }
+}
+
+async function createNewSection(req: AuthenticatedRequest, res: Response) {
+  const { name, topic_id } = req.body;
+  try {
+    const [result] = await pool.query<ResultSetHeader>(
+      'INSERT INTO sections (name, topic_id, created_by) VALUES (?, ?, ?)',
+      [name, topic_id, req.user.id]
+    );
+    res.status(201).json({ id: result.insertId });
+  } catch (error) {
+    console.error('Error creating section:', error);
+    res.status(500).json({ error: 'Failed to create section' });
+  }
+}
+
+async function getSingleSection(req: Request, res: Response) {
+  const { id } = req.params;
+  try {
+    const [sections] = await pool.query<RowDataPacket[]>(
+      'SELECT * FROM sections WHERE id = ?',
+      [id]
+    );
+    if (sections.length === 0) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+    res.json(sections[0]);
+  } catch (error) {
+    console.error('Error fetching section:', error);
+    res.status(500).json({ error: 'Failed to fetch section' });
+  }
+}
+
+async function updateSectionById(req: Request, res: Response) {
+  const { id } = req.params;
+  const { name, topic_id } = req.body;
+  try {
+    const [result] = await pool.query<ResultSetHeader>(
+      'UPDATE sections SET name = ?, topic_id = ? WHERE id = ?',
+      [name, topic_id, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+    res.json({ message: 'Section updated successfully' });
+  } catch (error) {
+    console.error('Error updating section:', error);
+    res.status(500).json({ error: 'Failed to update section' });
+  }
+}
+
+async function removeSectionById(req: Request, res: Response) {
+  const { id } = req.params;
+  try {
+    const [result] = await pool.query<ResultSetHeader>(
+      'DELETE FROM sections WHERE id = ?',
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+    res.json({ message: 'Section deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting section:', error);
+    res.status(500).json({ error: 'Failed to delete section' });
+  }
+}
+
+async function getSectionsByTopicId(req: Request, res: Response) {
+  const { topicId } = req.params;
+  try {
+    const [sections] = await pool.query<RowDataPacket[]>(
+      'SELECT * FROM sections WHERE topic_id = ? ORDER BY created_at DESC',
+      [topicId]
+    );
+    res.json(sections);
+  } catch (error) {
+    console.error('Error fetching sections by topic:', error);
+    res.status(500).json({ error: 'Failed to fetch sections' });
+  }
+}
+
+async function getSubjectsByGrade(req: Request, res: Response) {
+  try {
+    const { gradeId } = req.params;
+    const [subjects] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT s.* 
+       FROM subjects s
+       JOIN topics t ON t.subject_id = s.id
+       WHERE t.grade_id = ?
+       ORDER BY s.name`,
+      [gradeId]
+    );
+    res.json(subjects);
+  } catch (error) {
+    console.error('Error fetching subjects by grade:', error);
+    res.status(500).json({ error: 'Failed to fetch subjects' });
+  }
+}
+
 export {
   login,
   getRecentUsers,
@@ -1408,5 +1597,12 @@ export {
   updateAdmin,
   deleteAdmin,
   updateAdminStatus,
-  getAdminById
+  getAdminById,
+  getAllSections,
+  createNewSection,
+  getSingleSection,
+  updateSectionById,
+  removeSectionById,
+  getSectionsByTopicId,
+  getSubjectsByGrade
 };

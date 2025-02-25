@@ -8,7 +8,8 @@ import {
   getTopicCountBySubject,
   getTopicsBySubjectAndYear,
   getTopicsByYear,
-  getTopicCountsBySubject
+  getTopicCountsBySubject,
+  getTopicDetails
 } from '../controllers/topicController';
 
 const router = express.Router();
@@ -22,6 +23,7 @@ router.get('/year/:yearId', getTopicsByYear);
 // Protected routes (authentication needed)
 router.use(authenticateToken);
 router.get('/', getTopics);
+router.get('/:topicId/details', getTopicDetails);
 router.post('/', createTopic);
 router.put('/:id', updateTopic);
 router.delete('/:id', deleteTopic);

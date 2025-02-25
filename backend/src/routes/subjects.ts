@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express from 'express';
 import { RequestHandler } from 'express-serve-static-core';
 
 // Define the authenticated request type
@@ -24,16 +24,20 @@ import {
   getSubjects, 
   createSubject, 
   updateSubject, 
-  deleteSubject 
+  deleteSubject,
+  getSubjectStatsByYear 
 } from '../controllers/subjectController';
 
-const router = Router();
+const router = express.Router();
+
+// Public routes
+router.get('/stats', getSubjectStatsByYear);
+router.get('/', getSubjects);
 
 // Protected routes (authentication needed)
 router.use(authenticateToken as RequestHandler);
 
 // Subject routes with proper typing
-router.get('/', getSubjects as unknown as AuthHandler);
 router.post('/', createSubject as unknown as AuthHandler);
 router.put('/:id', updateSubject as unknown as AuthHandler);
 router.delete('/:id', deleteSubject as unknown as AuthHandler);

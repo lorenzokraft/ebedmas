@@ -13,7 +13,8 @@ import {
   ChevronUp,
   Sliders,
   Lock,
-  Layout
+  Layout,
+  Building2
 } from 'lucide-react';
 
 const AdminSidebar = () => {
@@ -44,6 +45,8 @@ const AdminSidebar = () => {
     { name: 'Manage Grades', icon: <Settings className="w-5 h-5" />, path: '/admin/grades' },
     { name: 'Manage Subjects', icon: <BookOpen className="w-5 h-5" />, path: '/admin/subjects' },
     { name: 'Manage Topics', icon: <MessageSquare className="w-5 h-5" />, path: '/admin/topics' },
+    { name: 'Manage Sections', icon: <Layout className="w-5 h-5" />, path: '/admin/sections' },
+    { name: 'School Requests', icon: <Building2 className="w-5 h-5" />, path: '/admin/school-requests' },
   ];
 
   return (

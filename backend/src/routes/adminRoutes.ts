@@ -30,7 +30,14 @@ import {
   deleteAdmin,
   updateAdminStatus,
   getAdminById,
-  login
+  login,
+  getAllSections,
+  createNewSection,
+  getSingleSection,
+  updateSectionById,
+  removeSectionById,
+  getSectionsByTopicId,
+  getSubjectsByGrade
 } from '../controllers/adminController';
 
 const router = express.Router();
@@ -47,6 +54,7 @@ router.get('/grades/stats', getGrades as RequestHandler);
 router.post('/grades', createGrade as RequestHandler);
 router.put('/grades/:id', updateGrade as RequestHandler);
 router.delete('/grades/:id', deleteGrade as RequestHandler);
+router.get('/grades/:gradeId/subjects', getSubjectsByGrade as RequestHandler);
 
 // Question routes with file upload
 router.post('/questions', 
@@ -93,5 +101,13 @@ router.post('/topics', createTopic as RequestHandler);
 router.get('/topics/:id', getTopicById as RequestHandler);
 router.put('/topics/:id', updateTopic as RequestHandler);
 router.delete('/topics/:id', deleteTopic as RequestHandler);
+
+// Section routes
+router.get('/sections', getAllSections as RequestHandler);
+router.post('/sections', createNewSection as RequestHandler);
+router.get('/sections/:id', getSingleSection as RequestHandler);
+router.put('/sections/:id', updateSectionById as RequestHandler);
+router.delete('/sections/:id', removeSectionById as RequestHandler);
+router.get('/topics/:topicId/sections', getSectionsByTopicId as RequestHandler);
 
 export default router; 

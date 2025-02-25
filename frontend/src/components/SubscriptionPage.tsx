@@ -1,98 +1,135 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Footer from './Footer';
-import api from '../admin/services/api'; // Update the path as needed
-import Swal from 'sweetalert2';
-
-interface Plan {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  duration: number;
-  duration_unit: 'day' | 'month' | 'year';
-  features: string[];
-  is_active: boolean;
-}
+import React from 'react';
+import './SubscriptionPage.css';
 
 const SubscriptionPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchPlans();
-  }, []);
-
-  const fetchPlans = async () => {
-    try {
-      const response = await api.get('/api/subscriptions/public');
-      const activePlans = response.data
-        .filter((plan: Plan) => plan.is_active)
-        .sort((a: Plan, b: Plan) => a.price - b.price);
-      setPlans(activePlans);
-    } catch (error) {
-      console.error('Error fetching plans:', error);
-      Swal.fire('Error', 'Failed to load subscription plans', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubscribe = (planId: number) => {
-    // For now, just redirect to a confirmation page or handle subscription logic
-    console.log(`Subscribed to plan ${planId}`);
-    navigate('/confirmation'); // Redirect to a confirmation page
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Loading plans...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-center mb-12">Choose Your Plan</h1>
-      
-      <div className="grid md:grid-cols-3 gap-8">
-        {plans.map((plan) => (
-          <div 
-            key={plan.id}
-            className={`bg-white p-8 rounded-lg shadow-lg ${
-              plan.name.toLowerCase().includes('premium') ? 'border-2 border-blue-500' : ''
-            }`}
-          >
-            <h2 className="text-2xl font-bold mb-4">{plan.name}</h2>
-            <p className="text-4xl font-bold mb-6">
-              ${plan.price}
-              <span className="text-lg">/{plan.duration_unit}</span>
-            </p>
-            <ul className="mb-6 space-y-2">
-              {(typeof plan.features === 'string' 
-                ? plan.features.split(',') 
-                : plan.features
-              ).map((feature, index) => (
-                <li key={index} className="flex items-start">
-                  <span className="text-green-500 mr-2">✓</span>
-                  <span>{typeof feature === 'string' ? feature.trim() : feature}</span>
-                </li>
-              ))}
-            </ul>
-            <button 
-              onClick={() => handleSubscribe(plan.id)}
-              className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-            >
-              {plan.name.toLowerCase().includes('premium') ? 'Get Premium' : 'Get Started'}
-            </button>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+            Choose Your Plan
+          </h2>
+          <p className="mt-4 text-xl text-gray-600">
+            Select the perfect plan for your needs
+          </p>
+        </div>
+
+        <div className="mt-12 space-y-4 sm:mt-16 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-6 lg:max-w-4xl lg:mx-auto">
+          {/* Family Plan */}
+          <div className="bg-white rounded-lg shadow-lg divide-y divide-gray-200">
+            <div className="p-6">
+              <h3 className="text-2xl font-semibold text-gray-900">For Family</h3>
+              <p className="mt-4 text-gray-500">Perfect for family learning</p>
+              <div className="image-container">
+                <img 
+                  src="/images/fam.jpg" 
+                  alt="Family Plan" 
+                  className="subscription-image"
+                  width={300}
+                  height={200}
+                />
+              </div>
+              <div>
+                <a
+                  href="/plan-detail"
+                  className="w-full inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Join Now
+                </a>
+              </div>
+            </div>
           </div>
-        ))}
+
+          {/* School Plan */}
+          <div className="bg-white rounded-lg shadow-lg divide-y divide-gray-200">
+            <div className="p-6">
+              <h3 className="text-2xl font-semibold text-gray-900">For Schools</h3>
+              <p className="mt-4 text-gray-500">Custom solutions for Schools</p>
+              <div className="image-container">
+                <img 
+                  src="./images/fam.jpg" 
+                  alt="School Plan" 
+                  className="subscription-image"
+                  width={300}
+                  height={200}
+                />
+              </div>
+              <div>
+                <a
+                  href="/for-schools"
+                  className="w-full inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  Get Quote
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Links */}
+        <div className="mt-16 grid grid-cols-2 gap-8 lg:grid-cols-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">About Us</h3>
+            <ul className="mt-4 space-y-4">
+              <li>
+                <a href="./about" className="text-base text-gray-500 hover:text-gray-900">
+                  Our Story
+                </a>
+              </li>
+              <li>
+                <a href="./team" className="text-base text-gray-500 hover:text-gray-900">
+                  Team
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Resources</h3>
+            <ul className="mt-4 space-y-4">
+              <li>
+                <a href="./blog" className="text-base text-gray-500 hover:text-gray-900">
+                  Blog
+                </a>
+              </li>
+              <li>
+                <a href="./help" className="text-base text-gray-500 hover:text-gray-900">
+                  Help Center
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Legal</h3>
+            <ul className="mt-4 space-y-4">
+              <li>
+                <a href="./privacy" className="text-base text-gray-500 hover:text-gray-900">
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="./terms" className="text-base text-gray-500 hover:text-gray-900">
+                  Terms of Service
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Contact</h3>
+            <ul className="mt-4 space-y-4">
+              <li>
+                <a href="./support" className="text-base text-gray-500 hover:text-gray-900">
+                  Support
+                </a>
+              </li>
+              <li>
+                <a href="./sales" className="text-base text-gray-500 hover:text-gray-900">
+                  Sales
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
-      <br />
-      <br />
-      <Footer />
     </div>
   );
 };

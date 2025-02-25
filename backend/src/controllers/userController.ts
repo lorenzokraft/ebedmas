@@ -12,8 +12,15 @@ interface User extends RowDataPacket {
   role: string;
 }
 
+interface JwtPayload {
+  id: number;
+  email: string;
+  role: string;
+}
+
 export const login = async (req: Request, res: Response) => {
   try {
+    console.log('Login attempt for:', req.body.email);
     const { email, password } = req.body;
 
     // Input validation
@@ -22,21 +29,24 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Get user from database
-    const [users] = await pool.query<RowDataPacket[]>(
+    const [users] = await pool.query<User[]>(
       'SELECT * FROM users WHERE email = ?',
       [email]
     );
 
     if (users.length === 0) {
+      console.log('User not found:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const user = users[0];
+    console.log('Found user:', { id: user.id, email: user.email, role: user.role });
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     
     if (!isValidPassword) {
+      console.log('Invalid password for user:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -47,19 +57,33 @@ export const login = async (req: Request, res: Response) => {
     );
 
     // Generate JWT token
+    const tokenPayload = { 
+      id: user.id, 
+      email: user.email,
+      role: user.role
+    };
+    
+    const secret = process.env.JWT_SECRET || 'your-secret-key';
+    console.log('Using JWT secret:', secret.substring(0, 3) + '...');
+    console.log('Generating token with payload:', tokenPayload);
+    
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email,
-        role: user.role,
-        username: user.username
-      },
-      process.env.JWT_SECRET || 'your-secret-key',
+      tokenPayload,
+      secret,
       { expiresIn: '24h' }
     );
 
+    // Verify the token immediately to ensure it's valid
+    try {
+      const decoded = jwt.verify(token, secret) as JwtPayload;
+      console.log('Token verification successful:', decoded);
+    } catch (verifyError) {
+      console.error('Token verification failed:', verifyError);
+      return res.status(500).json({ message: 'Error generating secure token' });
+    }
+
     // Send success response
-    res.json({
+    const response = {
       message: 'Login successful',
       token,
       user: {
@@ -68,7 +92,9 @@ export const login = async (req: Request, res: Response) => {
         username: user.username,
         role: user.role
       }
-    });
+    };
+    console.log('Sending response:', { ...response, token: token.substring(0, 10) + '...' });
+    res.json(response);
 
   } catch (error) {
     console.error('Login error:', error);
@@ -155,10 +181,101 @@ export const getProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const user = users[0];
-    res.json({ user });
+    // Return user data in a nested object
+    res.json({ user: users[0] });
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({ message: 'Server error while fetching profile' });
+    console.error('Error getting user profile:', error);
+    res.status(500).json({ message: 'Server error while getting profile' });
+  }
+};
+
+export const promoteToAdmin = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    // Update user role to admin
+    const [result] = await pool.execute(
+      'UPDATE users SET role = ? WHERE id = ?',
+      ['admin', userId]
+    );
+
+    // Check if user was found and updated
+    if ((result as any).affectedRows === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get the updated user
+    const [users] = await pool.query<User[]>(
+      'SELECT id, username, email, role FROM users WHERE id = ?',
+      [userId]
+    );
+
+    res.json({
+      message: 'User promoted to admin successfully',
+      user: users[0]
+    });
+  } catch (error) {
+    console.error('Error promoting user to admin:', error);
+    res.status(500).json({ message: 'Server error while promoting user' });
+  }
+};
+
+export const getPasswordStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+
+    const [users] = await pool.query<User[]>(
+      'SELECT password, role FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Only check password status for trial users
+    const user = users[0];
+    if (user.role !== 'trial') {
+      res.json({ isPasswordSet: true });
+      return;
+    }
+
+    // For trial users, check if password is set
+    const isPasswordSet = user.password !== null && user.password !== '';
+    res.json({ isPasswordSet });
+    
+  } catch (error) {
+    console.error('Error checking password status:', error);
+    res.status(500).json({ message: 'Server error while checking password status' });
+  }
+};
+
+export const setPassword = async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
+
+    // Hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Update user's password
+    await pool.query(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedPassword, userId]
+    );
+
+    res.json({ message: 'Password set successfully' });
+  } catch (error) {
+    console.error('Error setting password:', error);
+    res.status(500).json({ message: 'Failed to set password' });
   }
 };

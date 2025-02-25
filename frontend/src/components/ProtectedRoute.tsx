@@ -1,5 +1,5 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -7,12 +7,21 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const token = localStorage.getItem('token');
+  const location = useLocation();
+
+  useEffect(() => {
+    // Store the current location in localStorage
+    if (token && location.pathname !== '/user/dashboard') {
+      localStorage.setItem('lastVisitedPath', location.pathname);
+    }
+  }, [token, location.pathname]);
 
   if (!token) {
-    return <Navigate to="/login" />;
+    // Save the current location to redirect back after login
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
 };
 
-export default ProtectedRoute; 
+export default ProtectedRoute;

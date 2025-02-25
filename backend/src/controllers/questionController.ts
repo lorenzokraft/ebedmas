@@ -144,17 +144,11 @@ export const getQuestionsByTopic = async (req: Request, res: Response) => {
       try {
         if (q.options) {
           const parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
-          if (q.type === 'click') {
+          if (q.type === 'click' || q.type === 'drag') {
             options = Array.isArray(parsedOptions) ? parsedOptions.map((opt, index) => ({
               id: index + 1,
-              text: String(opt).trim(),
-              isCorrect: String(opt).trim() === String(q.correctAnswer).trim()
-            })) : [];
-          } else if (q.type === 'drag') {
-            options = Array.isArray(parsedOptions) ? parsedOptions.map((opt, index) => ({
-              id: index + 1,
-              text: String(opt).trim(),
-              isCorrect: true
+              text: typeof opt === 'object' ? opt.text : String(opt).trim(),
+              isCorrect: q.type === 'click' ? String(opt.text || opt).trim() === String(q.correctAnswer).trim() : true
             })) : [];
           }
         }

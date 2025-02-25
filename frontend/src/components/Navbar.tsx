@@ -26,9 +26,7 @@ const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, logout }) => {
               <Link to="/quiz" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
                 Quiz
               </Link>
-              <Link to="/subscription" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
-                Subscribe
-              </Link>
+              
               <Link to="/contact" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
                 Contact Us
               </Link>
@@ -50,11 +48,18 @@ const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, logout }) => {
               </>
             ) : (
               <>
-                <Link to="/login" className="py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 transition duration-300">
+              
+                <Link
+                  to="/login"
+                  className="inline-block rounded-lg px-4 py-2 text-sm font-semibold leading-6 text-gray-900 hover:bg-gray-100"
+                >
                   Login
                 </Link>
-                <Link to="/register" className="py-2 px-4 bg-green-500 text-white rounded hover:bg-green-600 transition duration-300">
-                  Register
+                <Link
+                  to="/subscription"
+                  className="inline-block px-4 py-2 text-sm font-semibold leading-6 text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 rounded-lg shadow-sm transition duration-300"
+                >
+                  Start 7-Day Free Trial
                 </Link>
               </>
             )}

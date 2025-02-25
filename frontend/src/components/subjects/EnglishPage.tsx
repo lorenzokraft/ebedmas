@@ -82,7 +82,7 @@ const EnglishPage = ({ logout }: { logout: () => void }) => {
                   </div>
                 </div>
                 <button
-                  onClick={() => navigate(`/topics?subject=english&year=${section.year}`)}
+                  onClick={() => navigate(`/user/learning/english/year/${section.year}/topics`)}
                   className="bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-full transition-colors flex items-center space-x-2"
                 >
                   <span>See all {section.topicCount} Topics</span>

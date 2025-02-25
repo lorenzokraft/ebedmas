@@ -15,15 +15,44 @@ interface EditPlanModalProps {
     duration: number;
     duration_unit: 'day' | 'month' | 'year';
     features: string[];
+    package_type: 'all_access' | 'combo' | 'single';
+    subjects: string[];
+    yearly_discount_percentage: number;
+    additional_child_discount_percentage: number;
   };
 }
 
 const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps) => {
   const [name, setName] = useState(plan.name);
   const [description, setDescription] = useState(plan.description);
-  const [price, setPrice] = useState(plan.price.toString());
+  
+  // Package type settings
+  const [selectedPackages, setSelectedPackages] = useState<{
+    all_access: boolean;
+    combo: boolean;
+    single: boolean;
+  }>({ 
+    all_access: plan.package_type === 'all_access',
+    combo: plan.package_type === 'combo',
+    single: plan.package_type === 'single'
+  });
+
+  // Price settings for each package type
+  const [packagePrices, setPackagePrices] = useState<{
+    all_access: string;
+    combo: string;
+    single: string;
+  }>({ 
+    all_access: plan.package_type === 'all_access' ? plan.price.toString() : '',
+    combo: plan.package_type === 'combo' ? plan.price.toString() : '',
+    single: plan.package_type === 'single' ? plan.price.toString() : ''
+  });
+
   const [duration, setDuration] = useState(plan.duration.toString());
   const [durationUnit, setDurationUnit] = useState<'day' | 'month' | 'year'>(plan.duration_unit);
+  const [subjects, setSubjects] = useState<string[]>(plan.subjects || []);
+  const [yearlyDiscountPercentage, setYearlyDiscountPercentage] = useState(plan.yearly_discount_percentage?.toString() || '30');
+  const [additionalChildDiscountPercentage, setAdditionalChildDiscountPercentage] = useState(plan.additional_child_discount_percentage?.toString() || '50');
   const [features, setFeatures] = useState<string[]>([
     Array.isArray(plan.features) 
       ? plan.features.join('\n')
@@ -31,12 +60,27 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
   ]);
   const [loading, setLoading] = useState(false);
 
+  // Calculate monthly discount based on yearly discount
+  const monthlyDiscount = parseFloat(yearlyDiscountPercentage) / 12;
+
   useEffect(() => {
     setName(plan.name);
     setDescription(plan.description);
-    setPrice(plan.price.toString());
+    setSelectedPackages({
+      all_access: plan.package_type === 'all_access',
+      combo: plan.package_type === 'combo',
+      single: plan.package_type === 'single'
+    });
+    setPackagePrices({
+      all_access: plan.package_type === 'all_access' ? plan.price.toString() : '',
+      combo: plan.package_type === 'combo' ? plan.price.toString() : '',
+      single: plan.package_type === 'single' ? plan.price.toString() : ''
+    });
     setDuration(plan.duration.toString());
     setDurationUnit(plan.duration_unit);
+    setSubjects(plan.subjects || []);
+    setYearlyDiscountPercentage(plan.yearly_discount_percentage?.toString() || '30');
+    setAdditionalChildDiscountPercentage(plan.additional_child_discount_percentage?.toString() || '50');
     setFeatures([
       Array.isArray(plan.features) 
         ? plan.features.join('\n')
@@ -63,12 +107,23 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
     setLoading(true);
 
     try {
+      // Get the selected package type and its price
+      const selectedPackageType = Object.entries(selectedPackages).find(([_, isSelected]) => isSelected)?.[0] as 'all_access' | 'combo' | 'single';
+      
+      if (!selectedPackageType) {
+        throw new Error('No package type selected');
+      }
+
       const planData = {
         name,
         description,
-        price: parseFloat(price),
+        price: parseFloat(packagePrices[selectedPackageType]),
         duration: parseInt(duration),
         duration_unit: durationUnit,
+        package_type: selectedPackageType,
+        subjects,
+        yearly_discount_percentage: parseInt(yearlyDiscountPercentage),
+        additional_child_discount_percentage: parseInt(additionalChildDiscountPercentage),
         features: features[0]
       };
 
@@ -76,7 +131,7 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
       
       Swal.fire({
         title: 'Success!',
-        text: 'Plan updated successfully',
+        text: 'Plans updated successfully',
         icon: 'success',
         confirmButtonColor: '#10B981'
       });
@@ -84,10 +139,10 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
       onSuccess();
       onClose();
     } catch (error) {
-      console.error('Error updating plan:', error);
+      console.error('Error updating plans:', error);
       Swal.fire({
         title: 'Error!',
-        text: 'Failed to update plan',
+        text: 'Failed to update plans',
         icon: 'error',
         confirmButtonColor: '#EF4444'
       });
@@ -137,22 +192,43 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price ($)
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Package Types
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedPackages.all_access}
+                  onChange={(e) => setSelectedPackages(prev => ({ ...prev, all_access: e.target.checked }))}
+                  className="h-4 w-4 text-indigo-600"
+                />
+                <span>All Access</span>
               </label>
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                step="0.01"
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                required
-              />
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedPackages.combo}
+                  onChange={(e) => setSelectedPackages(prev => ({ ...prev, combo: e.target.checked }))}
+                  className="h-4 w-4 text-indigo-600"
+                />
+                <span>Combo</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedPackages.single}
+                  onChange={(e) => setSelectedPackages(prev => ({ ...prev, single: e.target.checked }))}
+                  className="h-4 w-4 text-indigo-600"
+                />
+                <span>Single Subject</span>
+              </label>
             </div>
+          </div>
 
+          {/* Duration settings - common for all selected packages */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Duration
@@ -166,7 +242,6 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
                 required
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Unit
@@ -176,10 +251,116 @@ const EditPlanModal = ({ isOpen, onClose, onSuccess, plan }: EditPlanModalProps)
                 onChange={(e) => setDurationUnit(e.target.value as 'day' | 'month' | 'year')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="day">Day(s)</option>
                 <option value="month">Month(s)</option>
                 <option value="year">Year(s)</option>
               </select>
+            </div>
+          </div>
+
+          {/* Price settings for each selected package */}
+          {selectedPackages.all_access && (
+            <div className="mb-4 p-4 border rounded-md bg-gray-50">
+              <h3 className="font-medium mb-3">All Access Package Settings</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Base Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    value={packagePrices.all_access}
+                    onChange={(e) => setPackagePrices(prev => ({ ...prev, all_access: e.target.value }))}
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedPackages.combo && (
+            <div className="mb-4 p-4 border rounded-md bg-gray-50">
+              <h3 className="font-medium mb-3">Combo Package Settings</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Base Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    value={packagePrices.combo}
+                    onChange={(e) => setPackagePrices(prev => ({ ...prev, combo: e.target.value }))}
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedPackages.single && (
+            <div className="mb-4 p-4 border rounded-md bg-gray-50">
+              <h3 className="font-medium mb-3">Single Subject Package Settings</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Base Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    value={packagePrices.single}
+                    onChange={(e) => setPackagePrices(prev => ({ ...prev, single: e.target.value }))}
+                    step="0.01"
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Discount settings - common for all packages */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Yearly Payment Discount (%)
+              </label>
+              <input
+                type="number"
+                value={yearlyDiscountPercentage}
+                onChange={(e) => setYearlyDiscountPercentage(e.target.value)}
+                min="0"
+                max="100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                required
+                disabled={durationUnit === 'year'}
+              />
+              {durationUnit !== 'year' && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Monthly equivalent: {monthlyDiscount.toFixed(1)}% per month
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Additional Child Discount (%)
+              </label>
+              <input
+                type="number"
+                value={additionalChildDiscountPercentage}
+                onChange={(e) => setAdditionalChildDiscountPercentage(e.target.value)}
+                min="0"
+                max="100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                required
+              />
+              <p className="text-sm text-gray-500 mt-1">Applied to all payment cycles</p>
             </div>
           </div>
 

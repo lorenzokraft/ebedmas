@@ -99,15 +99,20 @@ const TopicsList = ({ logout }: { logout: () => void }) => {
               topics.map((topic) => (
                 <Link
                   key={topic.id}
-                  to={`/quiz/${topic.id}`}
+                  to={`/topic/${topic.id}/sections`}
                   className="block bg-white rounded-lg shadow p-6 hover:shadow-lg transition-all duration-200 hover:scale-[1.02]"
                 >
                   <h3 className="text-xl font-bold mb-3">{topic.name}</h3>
                   <p className="text-gray-600 mb-4">
                     Practice questions and improve your skills
                   </p>
-                  <div className="text-blue-600">
-                    {topic.questionCount} questions
+                  <div className="flex justify-between items-center">
+                    <div className="text-blue-600">
+                      {topic.questionCount} questions
+                    </div>
+                    <div className="text-purple-600">
+                      5 sections
+                    </div>
                   </div>
                 </Link>
               ))
