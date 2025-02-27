@@ -27,17 +27,34 @@ export const verifyPayment = async (req: Request, res: Response) => {
         billingCycle,
         childrenCount,
         selectedPackage,
-        selectedSubject
+        selectedSubject,
+        email,
+        fullName
       } = metadata;
 
-      // Get user ID from the authenticated session
-      const userId = req.user?.id; // Assuming you have authentication middleware
-
-      // Start a transaction
+      // Only create user after successful payment
       const connection = await pool.getConnection();
       await connection.beginTransaction();
 
       try {
+        // Check if user exists first
+        const [existingUser] = await connection.query<RowDataPacket[]>(
+          'SELECT id FROM users WHERE email = ?',
+          [email]
+        );
+
+        let userId;
+        if (existingUser.length > 0) {
+          userId = existingUser[0].id;
+        } else {
+          // Create new user
+          const [userResult] = await connection.query(
+            'INSERT INTO users (email, full_name) VALUES (?, ?)',
+            [email, fullName]
+          );
+          userId = (userResult as any).insertId;
+        }
+
         // Create subscription record
         const [result] = await connection.query(
           `INSERT INTO subscriptions (
@@ -58,7 +75,7 @@ export const verifyPayment = async (req: Request, res: Response) => {
             billingCycle,
             childrenCount,
             selectedSubject,
-            data.amount / 100, // Convert from kobo to naira
+            data.amount, // Store the amount in kobo as received from Paystack
             reference,
             'active',
             billingCycle === 'yearly' ? 365 : 30

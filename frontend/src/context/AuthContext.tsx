@@ -5,14 +5,27 @@ interface AuthContextType {
   isPasswordSet: boolean;
   setPasswordSet: (value: boolean) => void;
   checkPasswordStatus: () => Promise<void>;
+  logout: () => void;
+  token: string | null;
+  user: any;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isPasswordSet, setPasswordSet] = useState<boolean>(false);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || 'null'));
   const navigate = useNavigate();
   const location = useLocation();
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+    navigate('/login');
+  };
 
   const checkPasswordStatus = async () => {
     try {
@@ -29,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Only check password status for trial users
       const response = await fetch('http://localhost:5000/api/users/password-status', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
       
@@ -56,7 +69,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [location.pathname]);
 
   return (
-    <AuthContext.Provider value={{ isPasswordSet, setPasswordSet, checkPasswordStatus }}>
+    <AuthContext.Provider value={{ 
+      isPasswordSet, 
+      setPasswordSet, 
+      checkPasswordStatus,
+      logout,
+      token,
+      user
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -52,6 +52,28 @@ const getAuthHeaders = () => {
 
 const api = {
   // Auth endpoints
+  async checkEmailAvailability(email: string) {
+    try {
+      console.log('Making API request to check email:', email);
+      const response = await fetch(`${API_BASE_URL}/users/check-email?email=${encodeURIComponent(email)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      console.log('API response status:', response.status);
+      if (!response.ok) {
+        throw new Error(`Network response was not ok: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('API response data:', data);
+      return data;
+    } catch (error) {
+      console.error('Error checking email:', error);
+      throw error;
+    }
+  },
+
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
     try {
       const response = await fetch(`${API_BASE_URL}/users/login`, {

@@ -6,7 +6,9 @@ import {
   toggleSubscriptionFreeze,
   updateAdditionalChildDiscount,
   updatePricingStructure,
-  createTrialSubscription
+  createTrialSubscription,
+  cancelSubscription,
+  getReceipts
 } from '../controllers/subscriptionController';
 import { authenticateToken, authenticateAdmin as authorizeAdmin } from '../middleware/auth';
 
@@ -15,6 +17,9 @@ const router = express.Router();
 // Public routes
 router.get('/default-pricing', getDefaultPricing);
 router.post('/trial', createTrialSubscription);
+
+// Protected routes
+router.get('/receipts', authenticateToken, getReceipts);
 
 // Admin routes
 router.put('/default-pricing', authenticateToken, authorizeAdmin, updateDefaultPricing);
@@ -30,20 +35,7 @@ router.post(
   '/update-pricing-structure',
   authenticateToken,
   authorizeAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      await subscriptionController.updatePricingStructure();
-      res.json({ 
-        success: true, 
-        message: 'Pricing structure updated successfully' 
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Failed to update pricing structure' 
-      });
-    }
-  }
+  updatePricingStructure
 );
 
 export default router;

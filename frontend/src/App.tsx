@@ -46,6 +46,7 @@ import SchoolRequests from './admin/pages/SchoolRequests';
 import PlanDetail from './pages/PlanDetail';
 import Terms from './pages/Terms';
 import TrialConfirmation from './pages/TrialConfirmation';
+import Settings from './pages/Settings';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -215,6 +216,11 @@ const AppContent = () => {
             </ProtectedRoute>
           } 
         />
+        <Route path="/user/settings" element={
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        } />
         {/* Catch-all route to redirect unknown paths to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

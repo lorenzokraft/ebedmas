@@ -5,6 +5,7 @@ import api from '../services/api';
 import { PaystackButton } from 'react-paystack';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify'; // Import toast
+import { useDebouncedCallback } from 'use-debounce';
 
 interface PricingPlan {
   type: 'all_access' | 'combo' | 'single';
@@ -33,6 +34,9 @@ const PlanDetail: React.FC = () => {
   const [emailError, setEmailError] = useState('');
   const [nameError, setNameError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [emailValid, setEmailValid] = useState(true);
+  const [emailChecking, setEmailChecking] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState(true);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -79,60 +83,67 @@ const PlanDetail: React.FC = () => {
   };
 
   const validateEmail = (email: string) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
   };
 
   const validateName = (name: string) => {
     return name.trim().length >= 2; // Minimum 2 characters
   };
 
-  const handleEmailChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const email = e.target.value;
-    setUserEmail(email);
-    setPaystackConfig(null); // Immediately clear Paystack config when email changes
-    
+  const checkEmailAvailability = useDebouncedCallback(async (email: string) => {
+    // Don't check empty emails
     if (!email) {
+      setEmailValid(false);
+      setEmailAvailable(false);
       setEmailError('');
       return;
     }
 
+    // First validate email format
     if (!validateEmail(email)) {
+      setEmailValid(false);
+      setEmailAvailable(false);
       setEmailError('Please enter a valid email address');
       return;
     }
 
+    // Email format is valid
+    setEmailValid(true);
+    setEmailError('');
+    
     try {
-      // Try to register with the email to check if it exists
-      const response = await fetch('http://localhost:5000/api/users/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email,
-          username: email.split('@')[0], // Use email prefix as username
-          password: 'temporary-check'
-        })
-      });
-
-      const data = await response.json();
+      setEmailChecking(true);
+      console.log('Checking email:', email); // Debug log
+      const response = await api.checkEmailAvailability(email);
+      console.log('Email check response:', response); // Debug log
       
-      if (response.status === 400 && data.message === 'Email already registered') {
-        setEmailError('This email is already registered. Please use a different email or login to your existing account.');
-      } else if (response.status === 201) {
-        // Email is available and registration succeeded
-        setEmailError('');
+      if (response.exists) {
+        console.log('Email exists'); // Debug log
+        setEmailAvailable(false);
+        setEmailError('This email is already registered. Please login to your account.');
+        setPaystackConfig(null);
       } else {
-        // Some other error occurred
+        console.log('Email available'); // Debug log
+        setEmailAvailable(true);
         setEmailError('');
       }
     } catch (error) {
       console.error('Error checking email:', error);
-      // Don't show technical errors to user
-      setEmailError('');
+      setEmailAvailable(false);
+      setEmailError('Unable to verify email. Please try again.');
+      setPaystackConfig(null);
+    } finally {
+      setEmailChecking(false);
     }
-  }, []);
+  }, 500);
+
+  const handleEmailChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const email = e.target.value.trim().toLowerCase(); // Normalize email
+    setUserEmail(email);
+    setPaystackConfig(null);
+    checkEmailAvailability(email);
+  }, [checkEmailAvailability]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
@@ -174,14 +185,16 @@ const PlanDetail: React.FC = () => {
 
   useEffect(() => {
     const initializePaystack = async () => {
-      if (!validateEmail(userEmail) || emailError || nameError || !acceptedTerms) {
+      if (!validateEmail(userEmail) || emailError || nameError || !acceptedTerms || !emailAvailable || emailChecking) {
         setPaystackConfig(null);
         return;
       }
 
-      // Get the selected plan
       const selectedPlan = plans.find(p => p.type === selectedPackage);
-      if (!selectedPlan) return;
+      if (!selectedPlan) {
+        setPaystackConfig(null);
+        return;
+      }
 
       let amount = billingCycle === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice;
       const additionalChildDiscount = getAdditionalChildDiscount(selectedPlan);
@@ -274,7 +287,7 @@ const PlanDetail: React.FC = () => {
       setPaystackConfig(config);
     };
     initializePaystack();
-  }, [plans, selectedPackage, userEmail, userName, billingCycle, childrenCount, selectedSubject, acceptedTerms]);
+  }, [plans, selectedPackage, userEmail, userName, billingCycle, childrenCount, selectedSubject, acceptedTerms, emailAvailable, emailChecking, emailError]);
 
   if (loading) {
     return (
@@ -477,14 +490,20 @@ const PlanDetail: React.FC = () => {
                 value={userEmail}
                 onChange={handleEmailChange}
                 className={`block w-full px-4 py-3 rounded-lg border ${
-                  emailError ? 'border-red-500' : 'border-gray-300'
+                  emailError || !emailValid || !emailAvailable ? 'border-red-500' : 'border-gray-300'
                 } focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500`}
                 placeholder="Enter your email address"
               />
-              {emailError && (
+              {(emailError || !emailValid || !emailAvailable) && (
                 <div className="mt-1 text-sm text-red-600 flex items-start space-x-1">
                   <span>⚠️</span>
                   <p>{emailError}</p>
+                </div>
+              )}
+              {emailChecking && (
+                <div className="mt-1 text-sm text-gray-600 flex items-start space-x-1">
+                  <span>⏳️</span>
+                  <p>Checking email availability...</p>
                 </div>
               )}
             </div>
@@ -521,7 +540,7 @@ const PlanDetail: React.FC = () => {
               </ul>
             </div>
 
-            {emailError ? (
+            {emailError || !emailValid || !emailAvailable ? (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <p className="text-red-600 flex items-center">
                   <span className="mr-2">⚠️</span>
@@ -530,14 +549,14 @@ const PlanDetail: React.FC = () => {
               </div>
             ) : null}
 
-            {paystackConfig && !emailError && !nameError && acceptedTerms ? (
+            {paystackConfig && !emailError && !nameError && acceptedTerms && emailValid && emailAvailable ? (
               <PaystackButton {...paystackConfig} />
             ) : (
               <button
                 disabled
                 className="w-full py-4 px-8 rounded-lg bg-gray-400 text-white font-semibold text-lg cursor-not-allowed"
               >
-                {emailError ? 'Email Not Available' : 'Complete Required Fields'}
+                {emailError || !emailValid || !emailAvailable ? 'Email Not Available' : 'Complete Required Fields'}
               </button>
             )}
           </div>

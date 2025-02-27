@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -41,11 +42,9 @@ interface MenuItem {
   path?: string;
 }
 
-interface DashboardNavProps {
-  logout: () => void;
-}
-
-const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
+const DashboardNav: React.FC = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [learners, setLearners] = useState<Learner[]>([]);
@@ -130,8 +129,13 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
   const isMenuOpen = (menuName: string) => activeMenu === menuName;
   const isActive = (path: string) => location.pathname === path;
 
-  // Get active menu's subitems for secondary nav
   const activeSubItems = menuItems.find(item => item.name === activeMenu)?.subItems;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    setIsUserMenuOpen(false);
+  };
 
   return (
     <div className="bg-white shadow-lg">
@@ -239,10 +243,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
                     </Link>
                     
                     <button
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        logout();
-                      }}
+                      onClick={handleLogout}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       <div className="flex items-center">

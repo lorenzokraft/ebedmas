@@ -402,6 +402,62 @@ const scheduleTrialEndCheck = async (subscription_id: number, trial_end_date: Da
   setTimeout(() => checkTrialEnd(subscription_id), timeUntilTrialEnd);
 };
 
+// Get user's receipts
+const getReceipts = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+
+    // Get subscription payments including trials and upcoming payments
+    const [subscriptions] = await pool.query<RowDataPacket[]>(`
+      SELECT 
+        s.id,
+        s.amount_paid as amount,
+        s.created_at as date,
+        s.card_last_four,
+        s.payment_reference,
+        s.billing_cycle,
+        s.status,
+        s.end_date,
+        s.auto_renew,
+        s.plan_type,
+        s.selected_subject,
+        u.username as user_name,
+        u.email as user_email
+      FROM subscriptions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.user_id = ? 
+      ORDER BY 
+        CASE 
+          WHEN s.status = 'upcoming' THEN 1
+          WHEN s.status = 'trial' THEN 2
+          ELSE 3
+        END,
+        s.created_at DESC
+    `, [userId]);
+
+    const receipts = subscriptions.map(sub => ({
+      id: sub.id,
+      date: sub.end_date || sub.date, // Use end_date for upcoming payments
+      amount: Number(sub.amount), // Convert to number explicitly
+      status: sub.status === 'trial' ? 'Trial' : 
+             sub.status === 'upcoming' ? 'Upcoming' : 'Success',
+      cardLastFour: sub.card_last_four || 'N/A',
+      cardType: sub.card_last_four ? 'Card' : '',
+      invoiceUrl: '#',
+      receiptUrl: '#',
+      planType: sub.plan_type || 'Standard Plan',
+      subjects: sub.selected_subject || 'All Subjects',
+      userName: sub.user_name,
+      userEmail: sub.user_email
+    }));
+
+    res.json(receipts);
+  } catch (error) {
+    console.error('Error fetching receipts:', error);
+    res.status(500).json({ message: 'Failed to fetch receipts' });
+  }
+};
+
 export {
   getSubscribers,
   toggleSubscriptionFreeze,
@@ -410,5 +466,6 @@ export {
   updateAdditionalChildDiscount,
   updatePricingStructure,
   createTrialSubscription,
-  cancelSubscription
+  cancelSubscription,
+  getReceipts
 };
