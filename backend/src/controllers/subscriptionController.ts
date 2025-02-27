@@ -343,7 +343,7 @@ const createTrialSubscription = async (req: Request, res: Response) => {
       message: 'Trial subscription created successfully',
       trial_end_date: trialEndDate,
       user_id: userId,
-      token
+      token: token // Ensure token is returned in trial creation response
     });
   } catch (error) {
     console.error('Error creating trial subscription:', error);

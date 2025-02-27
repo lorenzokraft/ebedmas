@@ -13,57 +13,96 @@ interface LearnerInfo {
 const TrialConfirmation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { trialEndDate, planName, amount, childrenCount = 1 } = location.state || {};
+  const { trialEndDate, planName, amount, childrenCount = 1, maxLearners = childrenCount } = location.state || {};
+  
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordSet, setIsPasswordSet] = useState(false);
   const { setPasswordSet } = useAuth();
 
   useEffect(() => {
-    // If no state is available, redirect to dashboard
     if (!location.state) {
       navigate('/user/dashboard');
     }
   }, [location.state, navigate]);
 
-  // If no state is available, don't render anything while redirecting
   if (!location.state) {
     return null;
   }
 
+  const getFormattedAmount = (amount: number | string) => {
+    // Remove currency symbol and commas if it's a string
+    let cleanAmount = typeof amount === 'string' 
+      ? amount.replace(/[₦,]/g, '') 
+      : amount;
+    
+    // Convert to number
+    const validAmount = Number(cleanAmount);
+    
+    if (isNaN(validAmount)) {
+      return '₦0.00';
+    }
+    
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(validAmount).replace('NGN', '₦');
+  };
+
+  const formattedAmount = getFormattedAmount(amount);
+  const trialEndDateFormatted = format(new Date(trialEndDate), 'MMMM do, yyyy');
+
   const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (password.length < 6) {
       toast.error('Password must be at least 6 characters long');
       return;
     }
-
     if (password !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication token not found. Please try starting your trial again.');
+        navigate('/plan-detail');
+        return;
+      }
+
       const response = await fetch('http://localhost:5000/api/users/set-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ password })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to set password');
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to set password');
       }
+
+      const data = await response.json();
+      
+      // Update local storage with the new token
+      localStorage.setItem('token', data.token);
 
       setIsPasswordSet(true);
       setPasswordSet(true);
-      toast.success('Password set successfully!');
-    } catch (error) {
+      toast.success('Password set successfully! Redirecting to dashboard...');
+      
+      // Wait a bit before redirecting to ensure the success message is seen
+      setTimeout(() => {
+        navigate('/user/dashboard');
+      }, 2000);
+    } catch (error: any) {
       console.error('Error setting password:', error);
-      toast.error('Failed to set password. Please try again.');
+      toast.error(error.message || 'Failed to set password. Please try again.');
     }
   };
 
@@ -138,115 +177,129 @@ const TrialConfirmation = () => {
   };
 
   return (
-    <div className="min-h-screen py-12 bg-gray-50 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white shadow sm:rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">
-            Welcome to Ebedmas Learning Platform
-          </h2>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-lg mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div className="bg-white rounded-xl shadow-sm p-8">
+          <h1 className="text-3xl font-bold text-center mb-8">Welcome to Ebedmas!</h1>
+          
+          <div className="bg-green-50 rounded-lg p-4 mb-8 text-center">
+            <p className="text-green-700">Your 7-day free trial has started</p>
+          </div>
 
-          {!isPasswordSet ? (
+          {!isPasswordSet && (
             <div className="mb-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Set Your Password</h3>
-              <form onSubmit={handleSetPassword} className="space-y-4">
+              <h2 className="text-xl font-semibold mb-6">Set Your Password</h2>
+              <form onSubmit={handleSetPassword} className="space-y-6">
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                     Password
                   </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <input
-                      type="password"
-                      id="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="block w-full pr-10 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 pl-3 py-2 sm:text-sm"
-                      placeholder="Enter your password"
-                      required
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    </div>
-                  </div>
+                  <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Enter your password"
+                    required
+                  />
                 </div>
+
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                     Confirm Password
                   </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <input
-                      type="password"
-                      id="confirmPassword"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="block w-full pr-10 rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 pl-3 py-2 sm:text-sm"
-                      placeholder="Confirm your password"
-                      required
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    </div>
-                  </div>
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="block w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Confirm your password"
+                    required
+                  />
                 </div>
+
                 <button
                   type="submit"
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="w-full py-3 px-4 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                 >
                   Set Password
                 </button>
               </form>
             </div>
-          ) : null}
+          )}
 
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Trial Details</h3>
-              <div className="mt-2 text-sm text-gray-600">
-                <p>Plan: {planName}</p>
-                <p>Number of Children: {childrenCount}</p>
-                <p>Trial Ends: {trialEndDate ? format(new Date(trialEndDate), 'MMMM do, yyyy') : 'Not available'}</p>
-                <p>Subscription Amount: {amount}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  A one-time ₦50 card authorization fee has been charged to verify your card.
+              <h2 className="text-xl font-semibold mb-4">Trial Details</h2>
+              <div className="space-y-3">
+                <p className="flex justify-between">
+                  <span className="text-gray-600">Plan:</span>
+                  <span className="font-medium">{planName}</span>
+                </p>
+                <p className="flex justify-between">
+                  <span className="text-gray-600">Number of Children:</span>
+                  <span className="font-medium">{childrenCount}</span>
+                </p>
+                <p className="flex justify-between">
+                  <span className="text-gray-600">Trial Ends:</span>
+                  <span className="font-medium">{trialEndDateFormatted}</span>
+                </p>
+                <p className="flex justify-between">
+                  <span className="text-gray-600">Subscription Amount:</span>
+                  <span className="font-medium">{formattedAmount}</span>
                 </p>
               </div>
+              
+              <p className="text-sm text-gray-500 mt-4 p-3 bg-gray-50 rounded-lg">
+                A one-time ₦50 card authorization fee has been charged to verify your card.
+              </p>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">What happens next?</h4>
-              <ul className="text-sm text-gray-600 space-y-2">
-                <li>• You have immediate access to all features</li>
-                <li>• Your free trial runs until {trialEndDate ? format(new Date(trialEndDate), 'MMMM do') : 'trial end'}</li>
-                <li>• Cancel anytime before trial ends to avoid subscription charges</li>
-                <li>• If you continue, {amount} will be charged on {trialEndDate ? format(new Date(trialEndDate), 'MMMM do') : 'trial end'}</li>
-                <li>• The ₦50 authorization fee is separate from your subscription</li>
+            <div>
+              <h2 className="text-xl font-semibold mb-4">What happens next?</h2>
+              <ul className="space-y-3 text-gray-600">
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">•</span>
+                  You have immediate access to all features
+                </li>
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">•</span>
+                  Your free trial runs until {trialEndDateFormatted}
+                </li>
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">•</span>
+                  Cancel anytime before trial ends to avoid subscription charges
+                </li>
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">•</span>
+                  If you continue, {formattedAmount} will be charged on {trialEndDateFormatted}
+                </li>
+                <li className="flex items-start">
+                  <span className="text-green-500 mr-2">•</span>
+                  The ₦50 authorization fee is separate from your subscription
+                </li>
               </ul>
             </div>
-
-            <div className="space-y-4">
-              {isPasswordSet ? (
-                <>
-                  <button
-                    onClick={handleAddLearners}
-                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Add Learners
-                  </button>
-                  <Link
-                    to="/user/dashboard"
-                    className="w-full flex justify-center py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    Go to Dashboard
-                  </Link>
-                </>
-              ) : (
-                <p className="text-sm text-center text-gray-500">Please set your password before continuing</p>
-              )}
-            </div>
           </div>
+
+          {isPasswordSet && (
+            <div className="space-y-4 mt-8">
+              <button
+                onClick={handleAddLearners}
+                className="w-full py-3 px-4 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              >
+                Add Learners
+              </button>
+              <Link
+                to="/user/dashboard"
+                className="block w-full py-3 px-4 text-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              >
+                Go to Dashboard
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

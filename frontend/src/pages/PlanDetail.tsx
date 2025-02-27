@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Book, BookOpen, Layers, GraduationCap, ChevronRight } from 'lucide-react';
 import api from '../services/api';
@@ -87,15 +87,52 @@ const PlanDetail: React.FC = () => {
     return name.trim().length >= 2; // Minimum 2 characters
   };
 
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEmailChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const email = e.target.value;
     setUserEmail(email);
-    if (email && !validateEmail(email)) {
+    setPaystackConfig(null); // Immediately clear Paystack config when email changes
+    
+    if (!email) {
+      setEmailError('');
+      return;
+    }
+
+    if (!validateEmail(email)) {
       setEmailError('Please enter a valid email address');
-    } else {
+      return;
+    }
+
+    try {
+      // Try to register with the email to check if it exists
+      const response = await fetch('http://localhost:5000/api/users/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email,
+          username: email.split('@')[0], // Use email prefix as username
+          password: 'temporary-check'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.status === 400 && data.message === 'Email already registered') {
+        setEmailError('This email is already registered. Please use a different email or login to your existing account.');
+      } else if (response.status === 201) {
+        // Email is available and registration succeeded
+        setEmailError('');
+      } else {
+        // Some other error occurred
+        setEmailError('');
+      }
+    } catch (error) {
+      console.error('Error checking email:', error);
+      // Don't show technical errors to user
       setEmailError('');
     }
-  };
+  }, []);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
@@ -136,104 +173,108 @@ const PlanDetail: React.FC = () => {
   }, [plans, selectedPackage]);
 
   useEffect(() => {
-    const selectedPlan = plans.find(p => p.type === selectedPackage);
-    if (!selectedPlan || !validateEmail(userEmail) || !validateName(userName) || !acceptedTerms) {
-      setPaystackConfig(null);
-      return;
-    }
+    const initializePaystack = async () => {
+      if (!validateEmail(userEmail) || emailError || nameError || !acceptedTerms) {
+        setPaystackConfig(null);
+        return;
+      }
 
-    const amount = Math.round(
-      calculateDiscountedPrice(
-        billingCycle === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice,
-        childrenCount,
-        getAdditionalChildDiscount(selectedPlan)
-      ) * 100
-    );
+      // Get the selected plan
+      const selectedPlan = plans.find(p => p.type === selectedPackage);
+      if (!selectedPlan) return;
 
-    const config = {
-      email: userEmail,
-      amount: 5000, // Minimum amount for card authorization
-      publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-      text: "Start 7-Day Free Trial",
-      className: "w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 px-8 rounded-lg flex items-center justify-center hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold text-lg",
-      metadata: {
-        name: userName,
-        plan_type: selectedPackage,
-        billing_cycle: billingCycle,
-        children_count: childrenCount,
-        is_trial: true,
-        actual_amount: amount
-      },
-      onSuccess: async (reference: any) => {
-        try {
-          // Create trial subscription
-          const response = await fetch('http://localhost:5000/api/subscriptions/trial', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
+      let amount = billingCycle === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.monthlyPrice;
+      const additionalChildDiscount = getAdditionalChildDiscount(selectedPlan);
+      amount = calculateDiscountedPrice(amount, childrenCount, additionalChildDiscount);
+
+      // Ensure amount is a valid number and round to 2 decimal places
+      const originalAmount = Number(amount.toFixed(2));
+
+      // Convert to kobo (multiply by 100)
+      const amountInKobo = Math.round(originalAmount * 100);
+
+      const config = {
+        email: userEmail,
+        amount: 5000, // Minimum amount for card authorization
+        publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+        text: "Start 7-Day Free Trial",
+        className: "w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 px-8 rounded-lg flex items-center justify-center hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl font-semibold text-lg",
+        metadata: {
+          name: userName,
+          plan_type: selectedPackage,
+          billing_cycle: billingCycle,
+          children_count: childrenCount,
+          is_trial: true,
+          actual_amount: amountInKobo,
+          original_amount: originalAmount
+        },
+        onSuccess: async (reference: any) => {
+          try {
+            // Create trial subscription
+            const response = await fetch('http://localhost:5000/api/subscriptions/trial', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                email: userEmail,
+                username: userName,
+                plan_type: selectedPlan?.type,
+                billing_cycle: billingCycle,
+                children_count: childrenCount,
+                selected_subject: selectedSubject,
+                amount_paid: amountInKobo,
+                original_amount: originalAmount,
+                reference: reference.reference,
+                card_last_four: reference.card?.last4 || reference.reference.slice(-4)
+              }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.message || 'Failed to create trial subscription');
+            }
+
+            // Save the token and user data
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify({
+              id: data.user_id,
               email: userEmail,
               username: userName,
-              plan_type: selectedPlan?.type,
-              billing_cycle: billingCycle,
-              children_count: childrenCount,
-              selected_subject: selectedSubject,
-              amount_paid: amount,
-              reference: reference.reference,
-              card_last_four: reference.card?.last4 || reference.reference.slice(-4)
-            }),
-          });
+              role: 'trial'
+            }));
 
-          const data = await response.json();
-
-          if (!response.ok) {
-            console.error('Server error:', data);
-            throw new Error(data.message || 'Failed to create trial subscription');
+            // Navigate to trial confirmation with the amount
+            navigate('/trial-confirmation', {
+              state: {
+                trialEndDate: data.trial_end_date,
+                planName: selectedPlan?.type === 'all_access' ? 'All Access' :
+                         selectedPlan?.type === 'combo' ? 'Combo Package' :
+                         selectedPlan?.type === 'single' ? 'Single Subject' : selectedPlan?.title,
+                amount: originalAmount,
+                childrenCount: childrenCount,
+                maxLearners: childrenCount,
+                email: userEmail
+              },
+              replace: true
+            });
+          } catch (error) {
+            console.error('Error creating trial subscription:', error);
+            toast.error('Failed to create subscription. Please try again.', {
+              position: "top-right",
+              autoClose: 5000
+            });
           }
-
-          // Store user ID and token in localStorage
-          if (data.user_id && data.token) {
-            localStorage.setItem('userId', data.user_id.toString());
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('isLoggedIn', 'true');
-            
-            // Force a page reload to update authentication state
-            window.dispatchEvent(new Event('storage'));
-          }
-
-          // Show success message
-          toast.success('Trial subscription created successfully!', {
-            position: "top-right",
-            autoClose: 5000
-          });
-
-          // Redirect to trial confirmation page with required state
-          navigate('/trial-confirmation', {
-            state: {
-              trialEndDate: data.trial_end_date,
-              planName: selectedPlan?.title,
-              amount: `₦${amount.toLocaleString()}`
-            },
-            replace: true // This prevents going back to the payment page
-          });
-          
-        } catch (error) {
-          console.error('Error creating trial:', error);
-          toast.error('Failed to create subscription. Please try again.', {
-            position: "top-right",
-            autoClose: 5000
-          });
+        },
+        onClose: () => {
+          navigate('/plan-detail');
         }
-      },
-      onClose: () => {
-        // Redirect back to plan detail page when payment modal is closed
-        navigate('/plan-detail');
-      }
+      };
+      setPaystackConfig(config);
     };
-
-    setPaystackConfig(config);
-  }, [selectedPackage, billingCycle, childrenCount, plans, userEmail, userName, acceptedTerms]);
+    initializePaystack();
+  }, [plans, selectedPackage, userEmail, userName, billingCycle, childrenCount, selectedSubject, acceptedTerms]);
 
   if (loading) {
     return (
@@ -313,14 +354,12 @@ const PlanDetail: React.FC = () => {
             >
               +
             </button>
-            {plans.length > 0 && (
-              <span className="text-sm text-gray-500 ml-4">
-                Each additional child gets {formatCurrency(
-                  billingCycle === 'yearly' 
-                    ? plans.find(p => p.type === selectedPackage)?.yearlyAdditionalChildDiscountAmount || 0
-                    : plans.find(p => p.type === selectedPackage)?.monthlyAdditionalChildDiscountAmount || 0
-                )} off!
-              </span>
+            {selectedPackage && (
+              <div className="text-sm text-green-600 ml-4">
+                Additional child gets ₦{billingCycle === 'yearly' 
+                  ? plans.find(p => p.type === selectedPackage)?.yearlyAdditionalChildDiscountAmount.toLocaleString()
+                  : plans.find(p => p.type === selectedPackage)?.monthlyAdditionalChildDiscountAmount.toLocaleString()} off!
+              </div>
             )}
           </div>
         </div>
@@ -329,13 +368,8 @@ const PlanDetail: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {plans.map((plan) => {
             const basePrice = billingCycle === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
-            const additionalChildDiscount = billingCycle === 'yearly' 
-              ? plan.yearlyAdditionalChildDiscountAmount 
-              : plan.monthlyAdditionalChildDiscountAmount;
-            
-            const totalBasePrice = calculateBasePrice(basePrice, childrenCount);
+            const additionalChildDiscount = getAdditionalChildDiscount(plan);
             const finalPrice = calculateDiscountedPrice(basePrice, childrenCount, additionalChildDiscount);
-            const hasDiscount = totalBasePrice !== finalPrice;
 
             return (
               <div
@@ -363,34 +397,23 @@ const PlanDetail: React.FC = () => {
                 <p className="text-gray-600 text-sm mb-4">{plan.description}</p>
                 <div className="space-y-2 mb-4">
                   {plan.type === 'single' ? (
-                    <div className="space-y-3">
-                      {plan.subjects.map((subject) => (
-                        <label 
-                          key={subject}
-                          className={`flex items-center p-2 rounded-lg cursor-pointer transition-colors ${
-                            selectedPackage === 'single' && selectedSubject === subject
-                              ? 'bg-blue-50'
-                              : 'hover:bg-gray-50'
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="subject"
-                            value={subject}
-                            checked={selectedPackage === 'single' && selectedSubject === subject}
-                            onChange={() => setSelectedSubject(subject)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                          />
-                          <span className="ml-3 flex items-center">
-                            <GraduationCap className="w-4 h-4 mr-2 text-blue-500" />
-                            {subject}
-                          </span>
+                    plan.subjects.map((subject) => (
+                      <div key={subject} className="flex items-center text-gray-700">
+                        <input
+                          type="radio"
+                          id={`subject-${subject}`}
+                          name="selected-subject"
+                          value={subject}
+                          checked={selectedSubject === subject}
+                          onChange={(e) => setSelectedSubject(e.target.value)}
+                          className="mr-2 h-4 w-4 text-blue-500 focus:ring-blue-400"
+                        />
+                        <label htmlFor={`subject-${subject}`} className="flex items-center cursor-pointer">
+                          <GraduationCap className="w-4 h-4 mr-2 text-blue-500" />
+                          <span>{subject}</span>
                         </label>
-                      ))}
-                    </div>
+                      </div>
+                    ))
                   ) : (
                     plan.subjects.map((subject) => (
                       <div key={subject} className="flex items-center text-gray-700">
@@ -401,25 +424,21 @@ const PlanDetail: React.FC = () => {
                   )}
                 </div>
                 <div className="mt-4">
-                  {hasDiscount && (
-                    <div className="text-base text-gray-400 line-through">
-                      {formatCurrency(totalBasePrice)}
-                    </div>
-                  )}
-                  <div className="text-4xl font-bold text-gray-900 mt-0.5">
-                    {formatCurrency(finalPrice)}
+                  <div className="flex flex-col">
+                    {childrenCount > 1 && (
+                      <span className="text-lg text-gray-500 line-through mb-1">
+                        {formatCurrency(basePrice * childrenCount)}
+                      </span>
+                    )}
+                    <span className="text-4xl font-bold text-gray-900">
+                      {formatCurrency(finalPrice)}
+                    </span>
                   </div>
-                  {hasDiscount && (
-                    <div className="text-sm text-green-600 font-semibold mt-2">
-                      {billingCycle === 'yearly' 
-                        ? `Save ${plan.yearlyDiscountPercentage}% with yearly billing`
-                        : childrenCount > 1 
-                          ? `Save ${formatCurrency(totalBasePrice - finalPrice)} with family discount`
-                          : ''}
-                    </div>
-                  )}
                   <div className="text-sm text-gray-500 mt-1.5">
                     {billingCycle === 'yearly' ? 'per year' : 'per month'}
+                  </div>
+                  <div className="text-sm text-green-600 mt-2">
+                    Additional child gets ₦{additionalChildDiscount.toLocaleString()} off!
                   </div>
                 </div>
               </div>
@@ -427,110 +446,101 @@ const PlanDetail: React.FC = () => {
           })}
         </div>
 
-        {/* Trial Info */}
-        <div className="mt-4 max-w-md mx-auto text-center space-y-3">
-          <p className="text-sm text-gray-600">
-            Start your 7-day free trial today. You'll have full access to all features and can cancel anytime during the trial period. 
-            {selectedPackage && (
-              <>
-                After your trial ends, you will be charged {formatCurrency(Math.round(
-                  calculateDiscountedPrice(
-                    billingCycle === 'yearly' 
-                      ? plans.find(p => p.type === selectedPackage)?.yearlyPrice || 0 
-                      : plans.find(p => p.type === selectedPackage)?.monthlyPrice || 0,
-                    childrenCount,
-                    getAdditionalChildDiscount(plans.find(p => p.type === selectedPackage))
-                  ) * 100
-                ) / 100)} starting {getSubscriptionStartDate()}.
-              </>
-            )}
-          </p>
-          <div className="bg-gray-50 p-4 rounded-lg text-sm">
-            <p className="font-medium text-gray-900 mb-2">Important Payment Information:</p>
-            <ul className="text-gray-600 text-left space-y-1">
-              <li>• A one-time ₦50 card authorization fee will be charged</li>
-              <li>• This small fee helps us verify your card and prevent fraud</li>
-              <li>• Your subscription amount will only be charged after 7 days if you don't cancel</li>
-              <li>• The authorization fee is non-refundable, as per standard banking practices</li>
-            </ul>
-          </div>
-        </div>
-
         {/* User Information Section */}
-        <div className="mt-8 max-w-md mx-auto space-y-6">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={userName}
-              onChange={handleNameChange}
-              placeholder="John Doe"
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                nameError ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {nameError && (
-              <p className="mt-1 text-sm text-red-600">
-                {nameError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={userEmail}
-              onChange={handleEmailChange}
-              placeholder="your@email.com"
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                emailError ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {emailError && (
-              <p className="mt-1 text-sm text-red-600">
-                {emailError}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Terms Checkbox */}
-        <div className="mt-6 max-w-md mx-auto">
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(e) => setAcceptedTerms(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <span className="text-sm text-gray-600">
-              I accept the{' '}
-              <Link to="/terms" className="text-blue-600 hover:text-blue-800 underline" target="_blank">
-                Ebedmas Terms and Conditions
-              </Link>
-            </span>
-          </label>
-        </div>
-
-        {/* Continue Button */}
-        <div className="text-center mt-8">
-          {paystackConfig && !emailError && !nameError && acceptedTerms && (
-            <div className="flex items-center justify-center">
-              <PaystackButton {...paystackConfig}>
-                <span className="flex items-center">
-                  Start 7-Day Free Trial
-                  <ChevronRight className="w-6 h-6 ml-2" />
-                </span>
-              </PaystackButton>
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Your Information</h2>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                id="name"
+                value={userName}
+                onChange={handleNameChange}
+                className={`block w-full px-4 py-3 rounded-lg border ${
+                  nameError ? 'border-red-500' : 'border-gray-300'
+                } focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500`}
+                placeholder="Enter your full name"
+              />
+              {nameError && <p className="mt-1 text-sm text-red-600">{nameError}</p>}
             </div>
-          )}
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={userEmail}
+                onChange={handleEmailChange}
+                className={`block w-full px-4 py-3 rounded-lg border ${
+                  emailError ? 'border-red-500' : 'border-gray-300'
+                } focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500`}
+                placeholder="Enter your email address"
+              />
+              {emailError && (
+                <div className="mt-1 text-sm text-red-600 flex items-start space-x-1">
+                  <span>⚠️</span>
+                  <p>{emailError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                id="terms"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+              <label htmlFor="terms" className="ml-2 block text-sm text-gray-700">
+                I agree to the{' '}
+                <Link to="/terms" className="text-blue-600 hover:text-blue-800 underline" target="_blank">
+                  Ebedmas Terms and Conditions
+                </Link>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Section */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Payment Information</h2>
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-6 rounded-lg text-sm">
+              <p className="font-medium text-gray-900 mb-2">Important Payment Information:</p>
+              <ul className="text-gray-600 text-left space-y-1">
+                <li>• A one-time ₦50 card authorization fee will be charged</li>
+                <li>• Your free trial starts immediately</li>
+                <li>• No charges during trial period</li>
+                <li>• Cancel anytime before trial ends</li>
+              </ul>
+            </div>
+
+            {emailError ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-red-600 flex items-center">
+                  <span className="mr-2">⚠️</span>
+                  {emailError}
+                </p>
+              </div>
+            ) : null}
+
+            {paystackConfig && !emailError && !nameError && acceptedTerms ? (
+              <PaystackButton {...paystackConfig} />
+            ) : (
+              <button
+                disabled
+                className="w-full py-4 px-8 rounded-lg bg-gray-400 text-white font-semibold text-lg cursor-not-allowed"
+              >
+                {emailError ? 'Email Not Available' : 'Complete Required Fields'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

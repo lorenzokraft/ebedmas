@@ -274,3 +274,19 @@ export const getPublicGradeStats = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Failed to get grade statistics' });
   }
 };
+
+export const getAllGrades = async (req: Request, res: Response) => {
+  try {
+    // Get all grades without requiring authentication
+    const [grades] = await pool.query<RowDataPacket[]>(`
+      SELECT DISTINCT name 
+      FROM grades 
+      ORDER BY name ASC
+    `);
+
+    res.json(grades);
+  } catch (error) {
+    console.error('Error fetching grades:', error);
+    res.status(500).json({ message: 'Failed to fetch grades' });
+  }
+};

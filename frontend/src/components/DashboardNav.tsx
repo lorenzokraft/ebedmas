@@ -83,6 +83,11 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
 
   const menuItems: MenuItem[] = [
     {
+      name: "Dashboard",
+      icon: <BarChart2 className="w-5 h-5" />,
+      path: '/user/dashboard'
+    },
+    {
       name: "My Learning",
       icon: <BookOpen className="w-5 h-5" />,
       subItems: [
@@ -110,6 +115,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
         { name: "Science", path: "/user/courses/science", isNew: true, icon: <Beaker className="w-4 h-4" /> }
       ]
     },
+   
     {
       name: "My Awards",
       icon: <Award className="w-5 h-5" />,
@@ -211,7 +217,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
                     </div>
                     
                     <Link
-                      to="/profile"
+                      to="/user/profile"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsUserMenuOpen(false)}
                     >
@@ -222,7 +228,7 @@ const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
                     </Link>
                     
                     <Link
-                      to="/settings"
+                      to="/user/settings"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => setIsUserMenuOpen(false)}
                     >

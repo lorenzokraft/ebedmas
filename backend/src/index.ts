@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes'; 
 import learnerRoutes from './routes/learnerRoutes';
-import gradeRoutes from './routes/grades';
+import gradeRoutes from './routes/gradeRoutes';
 import subjectRoutes from './routes/subjects';
 import topicRoutes from './routes/topics';
 import testRoutes from './routes/test';
@@ -51,8 +51,8 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/learners', learnerRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/grades', gradeRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/topics', topicRoutes);
 app.use('/', testRoutes);

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navig
 import Navbar from './components/Navbar';
 import Login from './components/Login';
 import UserDashboard from './components/UserDashboard.tsx';
+import Profile from './components/Profile';
 import QuizPage from './components/QuizPage';
 import SubscriptionPage from './components/SubscriptionPage';
 import AdminLogin from './admin/pages/AdminLogin';
@@ -104,7 +105,7 @@ const AppContent = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {!(location.pathname.startsWith('/user/dashboard') || location.pathname.startsWith('/admin')) && (
+      {!(location.pathname.startsWith('/user/') || location.pathname.startsWith('/admin')) && (
         <Navbar isAuthenticated={isAuthenticated} logout={handleLogout} />
       )}
       <Routes>
@@ -113,11 +114,10 @@ const AppContent = () => {
         <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/terms" element={<Terms />} />
-        <Route path="/user/dashboard" element={
-          <ProtectedRoute>
-            <UserDashboard logout={handleLogout} />
-          </ProtectedRoute>
-        } />
+        <Route path="/trial-confirmation" element={<TrialConfirmation />} />
+        {/* User Routes */}
+        <Route path="/user/dashboard" element={<ProtectedRoute><UserDashboard logout={handleLogout} /></ProtectedRoute>} />
+        <Route path="/user/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/subscription" element={<SubscriptionPage />} />
         <Route path="/plan-detail" element={<PlanDetail />} />
         <Route path="/for-schools" element={<ForSchools />} />

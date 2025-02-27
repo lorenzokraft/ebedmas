@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import pool from '../utils/db';
 
-interface Learner {
+interface Learner extends RowDataPacket {
+  id: number;
   name: string;
   grade: string;
+  created_at: Date;
 }
 
 export const addLearners = async (req: Request, res: Response) => {
@@ -46,5 +48,21 @@ export const addLearners = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error adding learners:', error);
     res.status(500).json({ message: 'Failed to add learners' });
+  }
+};
+
+export const getLearners = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+
+    const [learners] = await pool.query<Learner[]>(
+      'SELECT id, name, grade, created_at FROM learners WHERE user_id = ?',
+      [userId]
+    );
+
+    res.json(learners);
+  } catch (error) {
+    console.error('Error fetching learners:', error);
+    res.status(500).json({ message: 'Failed to fetch learners' });
   }
 };
