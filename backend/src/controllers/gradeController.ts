@@ -277,14 +277,31 @@ export const getPublicGradeStats = async (req: Request, res: Response) => {
 
 export const getAllGrades = async (req: Request, res: Response) => {
   try {
-    // Get all grades without requiring authentication
+    // Get all grades with their subjects
     const [grades] = await pool.query<RowDataPacket[]>(`
-      SELECT DISTINCT name 
-      FROM grades 
-      ORDER BY name ASC
+      SELECT DISTINCT 
+        g.id,
+        g.name,
+        JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'id', s.id,
+            'name', s.name
+          )
+        ) as subjects
+      FROM grades g
+      LEFT JOIN topics t ON t.grade_id = g.id
+      LEFT JOIN subjects s ON t.subject_id = s.id
+      GROUP BY g.id, g.name
+      ORDER BY g.name ASC
     `);
 
-    res.json(grades);
+    // Format the subjects array
+    const formattedGrades = grades.map((grade: any) => ({
+      ...grade,
+      subjects: grade.subjects ? JSON.parse(grade.subjects) : []
+    }));
+
+    res.json(formattedGrades);
   } catch (error) {
     console.error('Error fetching grades:', error);
     res.status(500).json({ message: 'Failed to fetch grades' });

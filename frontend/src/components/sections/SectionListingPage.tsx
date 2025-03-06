@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import DashboardNav from '../DashboardNav';
 import api from '../../services/api';
 
@@ -93,40 +93,35 @@ const SectionListingPage = ({ logout }: { logout: () => void }) => {
             <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
               <span className="text-2xl text-purple-600">{sections.length}</span>
             </div>
-            <span className="text-gray-600">skills</span>
+            <span className="text-gray-600">sections</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <span className="text-2xl text-blue-600">{topicDetails.stats.games}</span>
+          {topicDetails.stats && (
+            <div className="flex items-center gap-2">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <span className="text-2xl text-blue-600">{topicDetails.stats.games || 0}</span>
+              </div>
+              <span className="text-gray-600">games</span>
             </div>
-            <span className="text-gray-600">games</span>
-          </div>
+          )}
         </div>
 
-        {/* Sections List */}
-        <div>
-          <h2 className="text-2xl font-bold mb-6">{topicDetails.name}</h2>
-          <div className="space-y-4">
-            {sections.map((section, index) => (
-              <Link
-                key={section.id}
-                to={`/quiz/${topicId}/section/${section.id}`}
-                className="block bg-white rounded-lg shadow p-6 hover:shadow-lg transition-all duration-200"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-gray-500">{index + 1}</span>
-                      <h3 className="text-xl text-blue-600">{section.name}</h3>
-                    </div>
-                  </div>
-                  <div className="text-gray-500">
-                    {section.questionCount} questions
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+        {/* Sections Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {sections.map((section) => (
+            <Link
+              key={section.id}
+              to={`/quiz/${topicId}/section/${section.id}`}
+              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+            >
+              <h3 className="text-xl font-semibold mb-2">{section.name}</h3>
+              <div className="flex items-center text-gray-600">
+                <span>{section.questionCount} questions</span>
+              </div>
+              <div className="mt-4">
+                <span className="text-blue-600 hover:text-blue-800">Start Practice →</span>
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
     </div>

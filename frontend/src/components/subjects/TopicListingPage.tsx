@@ -90,75 +90,68 @@ const TopicListingPage = ({ logout }: { logout: () => void }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen bg-gray-100">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div>
-        <DashboardNav logout={logout} />
-        <div className="p-8">
-          <div className="text-red-600">Error: {error}</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <DashboardNav logout={logout} />
-      <div className="p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Year {year} {getSubjectTitle()}</h1>
-          <div className="mt-4 flex space-x-8">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <span className="text-purple-600 text-xl">{totalTopics}</span>
-              </div>
-              <span className="ml-2 text-gray-600">skills</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 text-xl">{totalQuestions}</span>
-              </div>
-              <span className="ml-2 text-gray-600">questions</span>
+      <div className="max-w-7xl mx-auto p-8">
+        {loading ? (
+          <div className="flex min-h-screen bg-gray-100">
+            <div className="flex-1 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
             </div>
           </div>
-        </div>
-
-        {topicCategories.map((category, index) => (
-          <div key={index} className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">{category.name}</h2>
-            {category.topics.length === 0 ? (
-              <div className="bg-gray-50 p-4 rounded-lg text-gray-600">
-                No topics available for this year yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {category.topics.map((topic) => (
-                  <div
-                    key={topic.id}
-                    onClick={() => handleTopicClick(topic.id)}
-                    className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg transition-shadow"
-                  >
-                    <h3 className="text-xl font-semibold mb-2">{topic.name}</h3>
-                    <p className="text-gray-600 mb-4">{topic.description}</p>
-                    <div className="text-sm text-gray-500">
-                      {topic.questionCount} {topic.questionCount === 1 ? 'question' : 'questions'}
-                    </div>
+        ) : error ? (
+          <div>
+            <div className="text-red-600">Error: {error}</div>
+          </div>
+        ) : (
+          <div>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold">Year {year} {getSubjectTitle()}</h1>
+              <div className="mt-4 flex space-x-8">
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                    <span className="text-purple-600 text-xl">{totalTopics}</span>
                   </div>
-                ))}
+                  <span className="ml-2 text-gray-600">skills</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 text-xl">{totalQuestions}</span>
+                  </div>
+                  <span className="ml-2 text-gray-600">questions</span>
+                </div>
               </div>
-            )}
+            </div>
+
+            {topicCategories.map((category, index) => (
+              <div key={index} className="mb-8">
+                <h2 className="text-2xl font-bold mb-4">{category.name}</h2>
+                {category.topics.length === 0 ? (
+                  <div className="bg-gray-50 p-4 rounded-lg text-gray-600">
+                    No topics available for this year yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {category.topics.map((topic) => (
+                      <div
+                        key={topic.id}
+                        onClick={() => handleTopicClick(topic.id)}
+                        className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                      >
+                        <h3 className="text-xl font-semibold mb-2">{topic.name}</h3>
+                        <p className="text-gray-600 mb-4">{topic.description}</p>
+                        <div className="text-sm text-gray-500">
+                          {topic.questionCount} {topic.questionCount === 1 ? 'question' : 'questions'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

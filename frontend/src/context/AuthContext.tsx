@@ -8,6 +8,8 @@ interface AuthContextType {
   logout: () => void;
   token: string | null;
   user: any;
+  isAuthenticated: boolean;
+  setAuthState: (token: string, user: any) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,14 +18,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isPasswordSet, setPasswordSet] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('token'));
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Update isAuthenticated whenever token changes
+  useEffect(() => {
+    setIsAuthenticated(!!token);
+  }, [token]);
+
+  const setAuthState = (newToken: string, newUser: any) => {
+    setToken(newToken);
+    setUser(newUser);
+    setIsAuthenticated(true);
+  };
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    setIsAuthenticated(false);
     navigate('/login');
   };
 
@@ -62,7 +77,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
     if (token) {
       checkPasswordStatus();
     }
@@ -75,7 +89,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       checkPasswordStatus,
       logout,
       token,
-      user
+      user,
+      isAuthenticated,
+      setAuthState
     }}>
       {children}
     </AuthContext.Provider>

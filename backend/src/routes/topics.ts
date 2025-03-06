@@ -19,11 +19,11 @@ router.get('/count/:subject', getTopicCountBySubject);
 router.get('/:subject/year/:year', getTopicsBySubjectAndYear);
 router.get('/:subject/counts', getTopicCountsBySubject);
 router.get('/year/:yearId', getTopicsByYear);
+router.get('/:topicId/details', getTopicDetails);
 
 // Protected routes (authentication needed)
 router.use(authenticateToken);
 router.get('/', getTopics);
-router.get('/:topicId/details', getTopicDetails);
 router.post('/', createTopic);
 router.put('/:id', updateTopic);
 router.delete('/:id', deleteTopic);

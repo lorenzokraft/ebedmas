@@ -116,29 +116,24 @@ export const getTopicCountBySubject = async (req: Request, res: Response) => {
     const { subject } = req.params;
     console.log('Fetching count for subject:', subject);
 
-    // Updated query to match your database schema
-    const [result] = await pool.query<RowDataPacket[]>(
-      `SELECT g.name as year, COUNT(t.id) as count 
-       FROM grades g 
-       LEFT JOIN topics t ON t.grade = g.id 
-       LEFT JOIN subjects s ON t.subject = s.id 
-       WHERE s.name = ? 
-       GROUP BY g.id, g.name 
-       ORDER BY g.name`,
+    const [results] = await pool.query(`
+      SELECT g.name as year, COUNT(t.id) as count 
+      FROM grades g 
+      LEFT JOIN topics t ON t.grade_id = g.id 
+      LEFT JOIN subjects s ON t.subject_id = s.id 
+      WHERE LOWER(s.name) = LOWER(?) 
+      GROUP BY g.id, g.name 
+      ORDER BY g.name`,
       [subject]
     );
 
-    console.log('Count result by grade:', result);
-
-    // Transform the result into a more usable format
-    const countsByGrade = result.reduce((acc: { [key: string]: number }, row: any) => {
-      // Extract the year number from grade name (e.g., "Year 1" -> 1)
-      const yearNum = parseInt(row.year.replace(/\D/g, ''));
-      acc[yearNum] = row.count;
+    const counts = results.reduce((acc: { [key: string]: number }, row: any) => {
+      const year = parseInt(row.year.replace(/\D/g, ''));
+      acc[year] = row.count;
       return acc;
     }, {});
 
-    res.json({ counts: countsByGrade });
+    res.json(counts);
   } catch (error) {
     console.error('Error getting topic count:', error);
     res.status(500).json({ message: 'Failed to get topic count' });
@@ -163,12 +158,12 @@ export const getTopicsBySubjectAndYear = async (req: Request, res: Response) => 
     const [allTopics] = await pool.query('SELECT * FROM topics');
     console.log('\nAll topics in database:', allTopics);
 
-    // First, get the subject ID
-    const subjectQuery = 'SELECT id, name FROM subjects WHERE LOWER(name) LIKE LOWER(?)';
+    // First, get the subject ID - handle both 'maths' and 'Mathematics'
+    const subjectQuery = 'SELECT id, name FROM subjects WHERE LOWER(name) = LOWER(?) OR (LOWER(?) = "maths" AND LOWER(name) = "mathematics")';
     console.log('\nSubject Query:', subjectQuery);
-    console.log('Subject Params:', [`%${subject}%`]);
+    console.log('Subject Params:', [subject, subject]);
 
-    const [subjects] = await pool.query(subjectQuery, [`%${subject}%`]);
+    const [subjects] = await pool.query(subjectQuery, [subject, subject]);
     console.log('Found subjects:', subjects);
 
     if (!subjects.length) {
@@ -182,12 +177,12 @@ export const getTopicsBySubjectAndYear = async (req: Request, res: Response) => 
       });
     }
 
-    // Get the grade ID
-    const gradeQuery = 'SELECT id, name FROM grades WHERE LOWER(name) = LOWER(?)';
+    // Get the grade ID - more flexible matching
+    const gradeQuery = 'SELECT id, name FROM grades WHERE name LIKE ?';
     console.log('\nGrade Query:', gradeQuery);
-    console.log('Grade Params:', [`Year ${year}`]);
+    console.log('Grade Params:', [`%${year}%`]);
 
-    const [grades] = await pool.query(gradeQuery, [`Year ${year}`]);
+    const [grades] = await pool.query(gradeQuery, [`%${year}%`]);
     console.log('Found grades:', grades);
 
     if (!grades.length) {

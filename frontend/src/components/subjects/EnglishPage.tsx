@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import DashboardNav from '../DashboardNav';
 import publicApi from '../../admin/services/publicApi';
+import { useAuth } from '../../context/AuthContext';
 
 interface YearSection {
   year: number;
@@ -22,41 +23,25 @@ const yearContent: { [key: number]: string[] } = {
 const EnglishPage = ({ logout }: { logout: () => void }) => {
   const navigate = useNavigate();
   const [yearSections, setYearSections] = useState<YearSection[]>([]);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchTopicCounts = async () => {
       try {
-        const response = await publicApi.get('/grades/public');
-        const grades = response.data;
+        // Get the topics count per year
+        const topicsResponse = await publicApi.get('/topics/count/english');
+        const topicCounts = topicsResponse.data;
 
-        // Create year sections based on grades that have English topics
-        const activeYears = grades
-          .filter((grade: any) => {
-            const englishSubject = grade.subjects.find((s: any) => 
-              s.name.toLowerCase() === 'english' || 
-              s.name.toLowerCase() === 'english language' ||
-              s.name.toLowerCase().includes('english')
-            );
-            return englishSubject && englishSubject.topicCount > 0;
-          })
-          .map((grade: any) => {
-            const year = parseInt(grade.name.replace(/\D/g, ''));
-            const englishSubject = grade.subjects.find((s: any) => 
-              s.name.toLowerCase() === 'english' || 
-              s.name.toLowerCase() === 'english language' ||
-              s.name.toLowerCase().includes('english')
-            );
+        // Create year sections from topic counts
+        const sections = Object.entries(topicCounts).map(([year, count]) => ({
+          year: parseInt(year),
+          title: `Year ${year}`,
+          includes: yearContent[parseInt(year)] || ['Content coming soon...'],
+          topicCount: count as number
+        })).filter(section => section.topicCount > 0)
+        .sort((a, b) => a.year - b.year);
 
-            return {
-              year,
-              title: `Year ${year}`,
-              includes: yearContent[year] || ['Content coming soon...'],
-              topicCount: englishSubject?.topicCount || 0
-            };
-          })
-          .sort((a, b) => a.year - b.year); // Sort by year
-
-        setYearSections(activeYears);
+        setYearSections(sections);
       } catch (error) {
         console.error('Error fetching topic counts:', error);
       }

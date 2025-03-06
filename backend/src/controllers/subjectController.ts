@@ -137,9 +137,12 @@ export const getSubjectStatsByYear = async (req: Request, res: Response) => {
       SELECT 
         s.id,
         s.name,
-        CONCAT(UPPER(SUBSTRING(s.name, 1, 1)), LOWER(SUBSTRING(s.name, 2))) as display_name
+        CASE 
+          WHEN LOWER(s.name) = 'mathematics' THEN 'Mathematics'
+          ELSE CONCAT(UPPER(SUBSTRING(s.name, 1, 1)), LOWER(SUBSTRING(s.name, 2)))
+        END as display_name
       FROM subjects s
-      WHERE s.name IN ('english', 'maths', 'science')
+      WHERE LOWER(s.name) IN ('english', 'mathematics', 'science')
       ORDER BY s.id;
     `);
     console.log('Subjects data:', subjects);

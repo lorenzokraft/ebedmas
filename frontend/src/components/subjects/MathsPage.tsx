@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardNav from '../DashboardNav';
 import publicApi from '../../admin/services/publicApi';
+import { useAuth } from '../../context/AuthContext';
 
 interface YearSection {
   year: number;
@@ -20,47 +21,25 @@ const yearContent: { [key: number]: string[] } = {
 
 const MathsPage = ({ logout }: { logout: () => void }) => {
   const [yearSections, setYearSections] = useState<YearSection[]>([]);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchTopicCounts = async () => {
       try {
-        // First get the topics count per year
-        const topicsResponse = await publicApi.get('/topics/mathematics/counts');
+        // Get the topics count per year
+        const topicsResponse = await publicApi.get('/topics/count/mathematics');
         const topicCounts = topicsResponse.data;
 
-        // Then get the grades info
-        const gradesResponse = await publicApi.get('/grades/public');
-        const grades = gradesResponse.data;
+        // Create year sections from topic counts
+        const sections = Object.entries(topicCounts).map(([year, count]) => ({
+          year: parseInt(year),
+          title: `Year ${year}`,
+          includes: yearContent[parseInt(year)] || ['Content coming soon...'],
+          topicCount: count as number
+        })).filter(section => section.topicCount > 0)
+        .sort((a, b) => a.year - b.year);
 
-        // Create a map to combine topics for the same year
-        const yearMap = new Map<number, YearSection>();
-
-        grades.forEach((grade: any) => {
-          const mathsSubject = grade.subjects.find((s: any) => 
-            s.name.toLowerCase() === 'mathematics'
-          );
-
-          if (mathsSubject) {
-            const year = parseInt(grade.name.replace(/\D/g, ''));
-            const actualTopicCount = topicCounts[year] || 0; // Get actual topic count
-
-            if (!yearMap.has(year)) {
-              yearMap.set(year, {
-                year,
-                title: `Year ${year}`,
-                includes: yearContent[year] || ['Content coming soon...'],
-                topicCount: actualTopicCount // Use actual topic count instead of question count
-              });
-            }
-          }
-        });
-
-        // Convert map to array and sort by year
-        const uniqueYearSections = Array.from(yearMap.values())
-          .sort((a, b) => a.year - b.year)
-          .filter(section => section.topicCount > 0); // Only show years with topics
-
-        setYearSections(uniqueYearSections);
+        setYearSections(sections);
       } catch (error) {
         console.error('Error fetching topic counts:', error);
       }

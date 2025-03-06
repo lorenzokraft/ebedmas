@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface NavbarProps {
   isAuthenticated: boolean;
@@ -7,6 +8,21 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, logout }) => {
+  const [isQuizOpen, setIsQuizOpen] = useState(false);
+  const quizMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (quizMenuRef.current && !quizMenuRef.current.contains(event.target as Node)) {
+        setIsQuizOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <nav className="bg-white shadow-lg sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4">
@@ -23,9 +39,49 @@ const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, logout }) => {
               <Link to="/about" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
                 About
               </Link>
-              <Link to="/quiz" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
-                Quiz
-              </Link>
+              
+              {/* Quiz Dropdown */}
+              <div className="relative" ref={quizMenuRef}>
+                <button 
+                  onClick={() => setIsQuizOpen(!isQuizOpen)}
+                  className="flex items-center py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300"
+                >
+                  Learning
+                  {isQuizOpen ? (
+                    <ChevronUp className="ml-1 w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="ml-1 w-4 h-4" />
+                  )}
+                </button>
+
+                {isQuizOpen && (
+                  <div className="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
+                    <div className="py-1">
+                      <Link
+                        to="/user/learning/mathematics"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsQuizOpen(false)}
+                      >
+                        Mathematics
+                      </Link>
+                      <Link
+                        to="/user/learning/english"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsQuizOpen(false)}
+                      >
+                        English
+                      </Link>
+                      <Link
+                        to="/user/learning/science"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsQuizOpen(false)}
+                      >
+                        Science
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <Link to="/contact" className="py-4 px-2 text-gray-500 font-semibold hover:text-blue-500 transition duration-300">
                 Contact Us
@@ -48,7 +104,6 @@ const Navbar: React.FC<NavbarProps> = ({ isAuthenticated, logout }) => {
               </>
             ) : (
               <>
-              
                 <Link
                   to="/login"
                   className="inline-block rounded-lg px-4 py-2 text-sm font-semibold leading-6 text-gray-900 hover:bg-gray-100"

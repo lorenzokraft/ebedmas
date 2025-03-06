@@ -155,17 +155,13 @@ const api = {
 
   // Topics endpoints
   getTopicDetails: async (topicId: string): Promise<TopicDetails> => {
-    const response = await fetch(`${API_BASE_URL}/topics/${topicId}`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await fetch(`${API_BASE_URL}/topics/${topicId}`);
     return response.json();
   },
 
   // Sections endpoints
   getSectionsByTopic: async (topicId: string): Promise<Section[]> => {
-    const response = await fetch(`${API_BASE_URL}/sections/by-topic/${topicId}`, {
-      headers: getAuthHeaders(),
-    });
+    const response = await fetch(`${API_BASE_URL}/sections/topic/${topicId}`);
     return response.json();
   },
 

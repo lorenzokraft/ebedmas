@@ -42,8 +42,12 @@ interface MenuItem {
   path?: string;
 }
 
-const DashboardNav: React.FC = () => {
-  const { logout } = useAuth();
+interface DashboardNavProps {
+  logout?: () => void;
+}
+
+const DashboardNav: React.FC<DashboardNavProps> = ({ logout }) => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -53,19 +57,20 @@ const DashboardNav: React.FC = () => {
 
   useEffect(() => {
     const fetchLearners = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/learners', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setLearners(response.data);
-      } catch (error) {
-        console.error('Error fetching learners:', error);
+      if (user) {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await axios.get('http://localhost:5000/api/learners', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setLearners(response.data);
+        } catch (error) {
+          console.error('Error fetching learners:', error);
+        }
       }
     };
-
     fetchLearners();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -80,45 +85,41 @@ const DashboardNav: React.FC = () => {
     };
   }, []);
 
+  const handleLogout = () => {
+    if (logout) {
+      logout();
+    }
+    navigate('/login');
+    setIsUserMenuOpen(false);
+  };
+
   const menuItems: MenuItem[] = [
     {
-      name: "Dashboard",
-      icon: <BarChart2 className="w-5 h-5" />,
-      path: '/user/dashboard'
-    },
-    {
-      name: "My Learning",
+      name: 'Subjects',
       icon: <BookOpen className="w-5 h-5" />,
       subItems: [
-        { name: "Maths", path: "/user/learning/maths", icon: <Calculator className="w-4 h-4" /> },
-        { name: "English", path: "/user/learning/english", icon: <Globe2 className="w-4 h-4" /> },
-        { name: "Science", path: "/user/learning/science", isNew: true, icon: <Beaker className="w-4 h-4" /> }
+        { name: 'Mathematics', path: '/user/learning/maths', icon: <Calculator className="w-4 h-4" /> },
+        { name: 'English', path: '/user/learning/english', icon: <Globe2 className="w-4 h-4" /> },
+        { name: 'Science', path: '/user/learning/science', icon: <Beaker className="w-4 h-4" /> }
       ]
     },
     {
-      name: "Analytics",
+      name: 'Analytics',
       icon: <BarChart2 className="w-5 h-5" />,
       subItems: [
-        { name: "Progress", path: "/user/analytics/progress", icon: <Target className="w-4 h-4" /> },
-        { name: "Usage", path: "/user/analytics/usage", icon: <Clock className="w-4 h-4" /> },
-        { name: "Scores", path: "/user/analytics/scores", icon: <Brain className="w-4 h-4" /> },
-        { name: "Questions", path: "/user/analytics/questions", icon: <Lightbulb className="w-4 h-4" /> }
+        { name: 'Progress Overview', path: '/user/analytics/overview', icon: <Target className="w-4 h-4" /> },
+        { name: 'Subject Performance', path: '/user/analytics/subjects', icon: <Brain className="w-4 h-4" /> },
+        { name: 'Learning History', path: '/user/analytics/history', icon: <Clock className="w-4 h-4" /> }
       ]
     },
     {
-      name: "Courses",
-      icon: <GraduationCap className="w-5 h-5" />,
-      subItems: [
-        { name: "Maths", path: "/user/courses/maths", icon: <Calculator className="w-4 h-4" /> },
-        { name: "English", path: "/user/courses/english", icon: <Globe2 className="w-4 h-4" /> },
-        { name: "Science", path: "/user/courses/science", isNew: true, icon: <Beaker className="w-4 h-4" /> }
-      ]
-    },
-   
-    {
-      name: "My Awards",
+      name: 'My Awards',
       icon: <Award className="w-5 h-5" />,
-      path: "/user/awards"
+      subItems: [
+        { name: 'Achievements', path: '/user/awards/achievements', icon: <Target className="w-4 h-4" /> },
+        { name: 'Badges', path: '/user/awards/badges', icon: <Award className="w-4 h-4" /> },
+        { name: 'Leaderboard', path: '/user/awards/leaderboard', icon: <Users className="w-4 h-4" /> }
+      ]
     }
   ];
 
@@ -131,44 +132,35 @@ const DashboardNav: React.FC = () => {
 
   const activeSubItems = menuItems.find(item => item.name === activeMenu)?.subItems;
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-    setIsUserMenuOpen(false);
-  };
-
   return (
     <div className="bg-white shadow-lg">
-      {/* Main Navigation */}
       <nav className="bg-green-500">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link to="/user/dashboard" className="flex-shrink-0 flex items-center">
+              <Link to="/" className="flex-shrink-0 flex items-center">
                 <h1 className="text-xl font-bold text-white">Ebedmas</h1>
               </Link>
               <div className="hidden sm:ml-10 sm:flex sm:space-x-8">
                 {menuItems.map((item) => (
                   <div key={item.name} className="relative">
                     {item.subItems ? (
-                      <div>
-                        <button
-                          onClick={() => toggleMenu(item.name)}
-                          className={`inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md ${
-                            isMenuOpen(item.name) ? 'bg-green-600' : ''
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2">
-                            {item.icon}
-                            <span>{item.name}</span>
-                            {isMenuOpen(item.name) ? (
-                              <ChevronUp className="w-4 h-4" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4" />
-                            )}
-                          </div>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => toggleMenu(item.name)}
+                        className={`inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md ${
+                          isMenuOpen(item.name) ? 'bg-green-600' : ''
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2">
+                          {item.icon}
+                          <span>{item.name}</span>
+                          {isMenuOpen(item.name) ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </div>
+                      </button>
                     ) : (
                       <Link
                         to={item.path!}
@@ -188,72 +180,91 @@ const DashboardNav: React.FC = () => {
             </div>
 
             <div className="flex items-center">
-              <div className="relative" ref={userMenuRef}>
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md transition-colors duration-200"
-                >
-                  <User className="w-5 h-5 mr-2" />
-                  <span>Account</span>
-                  {isUserMenuOpen ? (
-                    <ChevronUp className="w-4 h-4 ml-2" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 ml-2" />
-                  )}
-                </button>
-
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900">Learners</p>
-                      {learners.length > 0 ? (
-                        <div className="mt-2 space-y-1">
-                          {learners.map((learner) => (
-                            <div key={learner.id} className="flex items-center text-sm text-gray-700">
-                              <Users className="w-4 h-4 mr-2 text-gray-400" />
-                              {learner.name} - Grade {learner.grade}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-500 mt-1">No learners added yet</p>
-                      )}
-                    </div>
-                    
-                    <Link
-                      to="/user/profile"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsUserMenuOpen(false)}
-                    >
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 mr-2" />
-                        Profile
-                      </div>
-                    </Link>
-                    
-                    <Link
-                      to="/user/settings"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsUserMenuOpen(false)}
-                    >
-                      <div className="flex items-center">
-                        <Settings className="w-4 h-4 mr-2" />
-                        Settings
-                      </div>
-                    </Link>
-                    
+              {user ? (
+                <>
+                  <div className="flex items-center relative">
                     <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                      className="inline-flex items-center px-4 py-2 text-base font-medium text-white hover:bg-green-600 rounded-md transition-colors duration-200"
                     >
-                      <div className="flex items-center">
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Logout
-                      </div>
+                      <User className="w-5 h-5 mr-2" />
+                      <span>Account</span>
+                      {isUserMenuOpen ? (
+                        <ChevronUp className="w-4 h-4 ml-2" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 ml-2" />
+                      )}
                     </button>
+
+                    {isUserMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-md shadow-lg py-1 z-50" ref={userMenuRef}>
+                        <div className="px-4 py-2 border-b border-gray-100">
+                          <p className="text-sm font-medium text-gray-900">Learners</p>
+                          {learners.length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              {learners.map((learner) => (
+                                <div key={learner.id} className="flex items-center text-sm text-gray-700">
+                                  <Users className="w-4 h-4 mr-2 text-gray-400" />
+                                  {learner.name} - Grade {learner.grade}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 mt-1">No learners added yet</p>
+                          )}
+                        </div>
+                        
+                        <Link
+                          to="/user/profile"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <div className="flex items-center">
+                            <User className="w-4 h-4 mr-2" />
+                            Profile
+                          </div>
+                        </Link>
+                        
+                        <Link
+                          to="/user/settings"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <div className="flex items-center">
+                            <Settings className="w-4 h-4 mr-2" />
+                            Settings
+                          </div>
+                        </Link>
+                        
+                        <button
+                          onClick={handleLogout}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          <div className="flex items-center">
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Logout
+                          </div>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              ) : (
+                <div className="flex space-x-4">
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/subscription"
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200"
+                  >
+                    Subscribe
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -294,4 +305,4 @@ const DashboardNav: React.FC = () => {
   );
 };
 
-export default DashboardNav; 
+export default DashboardNav;

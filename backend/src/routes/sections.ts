@@ -4,8 +4,7 @@ import { getSectionsByTopic, getQuestionCount } from '../controllers/sectionCont
 
 const router = express.Router();
 
-// Protected routes
-router.use(authenticateToken);
+// Public routes for learners
 router.get('/topic/:topicId', getSectionsByTopic);
 router.get('/:sectionId/question-count', getQuestionCount);
 

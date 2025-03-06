@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardNav from '../DashboardNav';
 import publicApi from '../../admin/services/publicApi';
+import { useAuth } from '../../context/AuthContext';
 
 interface YearSection {
   year: number;
@@ -21,37 +22,25 @@ const yearContent: { [key: number]: string[] } = {
 
 const SciencePage = ({ logout }: { logout: () => void }) => {
   const [yearSections, setYearSections] = useState<YearSection[]>([]);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const fetchTopicCounts = async () => {
       try {
-        const response = await publicApi.get('/grades/public');
-        const grades = response.data;
+        // Get the topics count per year
+        const topicsResponse = await publicApi.get('/topics/count/science');
+        const topicCounts = topicsResponse.data;
 
-        // Create year sections based on grades that have Science topics
-        const activeYears = grades
-          .filter((grade: any) => {
-            const scienceSubject = grade.subjects.find((s: any) => 
-              s.name.toLowerCase() === 'science'
-            );
-            return scienceSubject && scienceSubject.topicCount > 0;
-          })
-          .map((grade: any) => {
-            const year = parseInt(grade.name.replace(/\D/g, ''));
-            const scienceSubject = grade.subjects.find((s: any) => 
-              s.name.toLowerCase() === 'science'
-            );
+        // Create year sections from topic counts
+        const sections = Object.entries(topicCounts).map(([year, count]) => ({
+          year: parseInt(year),
+          title: `Year ${year}`,
+          includes: yearContent[parseInt(year)] || ['Content coming soon...'],
+          topicCount: count as number
+        })).filter(section => section.topicCount > 0)
+        .sort((a, b) => a.year - b.year);
 
-            return {
-              year,
-              title: `Year ${year}`,
-              includes: yearContent[year] || ['Content coming soon...'],
-              topicCount: scienceSubject?.topicCount || 0
-            };
-          })
-          .sort((a, b) => a.year - b.year);
-
-        setYearSections(activeYears);
+        setYearSections(sections);
       } catch (error) {
         console.error('Error fetching topic counts:', error);
       }

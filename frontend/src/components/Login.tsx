@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { setPasswordSet, setAuthState } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,17 +30,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email, password }),
       });
 
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Server error: Please try again later");
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Login failed');
       }
 
       const data = await response.json();
       console.log('Login response:', { ...data, token: data.token ? '***' : null });
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
 
       if (!data.token) {
         throw new Error('No token received from server');
@@ -50,19 +47,26 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         throw new Error('Invalid token format received');
       }
 
-      // Clear any existing auth data
-      localStorage.clear(); // Clear all auth-related data
-
       // Store new auth data
       localStorage.setItem('token', data.token.trim());
       localStorage.setItem('user', JSON.stringify(data.user));
       console.log('Token stored:', data.token.substring(0, 10) + '...');
       
-      console.log('Successfully stored auth data');
-      onLoginSuccess();
+      // Update auth state immediately
+      setAuthState(data.token.trim(), data.user);
+      
+      // Set password status based on user role
+      if (data.user.role === 'trial') {
+        setPasswordSet(false);
+      } else {
+        setPasswordSet(true);
+      }
 
-      // Get the redirect path from location state or use default
-      const redirectPath = location.state?.from?.pathname || '/user/dashboard';
+      console.log('Successfully stored auth data');
+
+      // Redirect based on user role and location state
+      const redirectPath = location.state?.from?.pathname || 
+        (data.user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
       console.log('Redirecting to:', redirectPath);
       navigate(redirectPath);
       
@@ -80,7 +84,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       <div className="absolute inset-0 z-0 overflow-hidden">
         <svg className="absolute top-20 left-20 w-16 h-16 text-yellow-500 opacity-20 transform rotate-45" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z"/>
+          <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v10z"/>
         </svg>
 
         <svg className="absolute top-40 right-32 w-16 h-16 text-blue-500 opacity-20 transform -rotate-12" viewBox="0 0 24 24" fill="currentColor">
@@ -190,8 +194,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         <div className="text-center text-sm">
           <span className="text-gray-600">New to Ebedmas? </span>
-          <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
-            Create an account
+          <Link to="/subscription" className="font-medium text-indigo-600 hover:text-indigo-500">
+            Sign up for a 7 Days FREE account
           </Link>
         </div>
       </div>

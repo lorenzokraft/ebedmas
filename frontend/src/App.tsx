@@ -47,6 +47,8 @@ import PlanDetail from './pages/PlanDetail';
 import Terms from './pages/Terms';
 import TrialConfirmation from './pages/TrialConfirmation';
 import Settings from './pages/Settings';
+import AnalyticsOverview from './components/analytics/AnalyticsOverview';
+import Achievements from './components/awards/Achievements';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -67,36 +69,15 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
 // Create a wrapper component that will use the navigation hooks
 const AppContent = () => {
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
-  const { isPasswordSet, checkPasswordStatus } = useAuth();
+  const { isPasswordSet, checkPasswordStatus, isAuthenticated, logout } = useAuth();
 
-  // Check auth status on mount and token changes
+  // Check auth status on mount
   useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('token');
-      setIsAuthenticated(!!token);
-      if (token) {
-        checkPasswordStatus();
-      }
-    };
-
-    checkAuth();
-    // Listen for storage events (in case token is changed in another tab)
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
-  }, [checkPasswordStatus]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setIsAuthenticated(false);
-    navigate('/login');
-  };
-
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-  };
+    if (isAuthenticated) {
+      checkPasswordStatus();
+    }
+  }, [isAuthenticated, checkPasswordStatus]);
 
   // Function to check if route should be protected
   const shouldProtectRoute = (pathname: string) => {
@@ -106,18 +87,20 @@ const AppContent = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {!(location.pathname.startsWith('/user/') || location.pathname.startsWith('/admin')) && (
-        <Navbar isAuthenticated={isAuthenticated} logout={handleLogout} />
+      {!location.pathname.startsWith('/user/') && 
+       !location.pathname.startsWith('/admin') && 
+       !location.pathname.startsWith('/quiz/') && (
+        <Navbar isAuthenticated={isAuthenticated} logout={logout} />
       )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/quiz" element={<QuizPage />} />
-        <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/trial-confirmation" element={<TrialConfirmation />} />
         {/* User Routes */}
-        <Route path="/user/dashboard" element={<ProtectedRoute><UserDashboard logout={handleLogout} /></ProtectedRoute>} />
+        <Route path="/user/dashboard" element={<ProtectedRoute><UserDashboard logout={logout} /></ProtectedRoute>} />
         <Route path="/user/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/subscription" element={<SubscriptionPage />} />
         <Route path="/plan-detail" element={<PlanDetail />} />
@@ -151,52 +134,39 @@ const AppContent = () => {
           </ProtectedAdminRoute>
         } />
         <Route path="/contact" element={<ContactPage />} />
-        <Route path="/user/learning/maths" element={
+        {/* Protected Subject Routes */}
+        <Route path="/user/learning/mathematics" element={
           <ProtectedRoute>
-            <MathsPage logout={handleLogout} />
+            <MathsPage logout={logout} />
           </ProtectedRoute>
         } />
+        <Route path="/user/learning/maths" element={<Navigate to="/user/learning/mathematics" replace />} />
         <Route path="/user/learning/english" element={
           <ProtectedRoute>
-            <EnglishPage logout={handleLogout} />
+            <EnglishPage logout={logout} />
           </ProtectedRoute>
         } />
         <Route path="/user/learning/science" element={
           <ProtectedRoute>
-            <SciencePage logout={handleLogout} />
+            <SciencePage logout={logout} />
           </ProtectedRoute>
         } />
-        <Route path="/admin/users/create-admin" element={
-          <AdminProtectedRoute>
-            <CreateAdmin />
-          </AdminProtectedRoute>
-        } />
-        <Route path="/admin/users/edit-admin/:id" element={
-          <AdminProtectedRoute>
-            <EditAdmin />
-          </AdminProtectedRoute>
-        } />
-        <Route 
-          path="/topics" 
-          element={
-            <ProtectedRoute>
-              <TopicListingPage logout={handleLogout} />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/quiz/topic/:topicId" 
-          element={
-            <ProtectedRoute>
-              <TopicQuizPage logout={handleLogout} />
-            </ProtectedRoute>
-          } 
-        />
+        
+        {/* Protected Topic Routes */}
         <Route 
           path="/user/learning/:subject/year/:yearId/topics" 
           element={
             <ProtectedRoute>
-              <TopicsList logout={handleLogout} />
+              <TopicsList logout={logout} />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route 
+          path="/topics" 
+          element={
+            <ProtectedRoute>
+              <TopicListingPage logout={logout} />
             </ProtectedRoute>
           } 
         />
@@ -204,7 +174,16 @@ const AppContent = () => {
           path="/topic/:topicId/sections" 
           element={
             <ProtectedRoute>
-              <SectionListingPage logout={handleLogout} />
+              <SectionListingPage logout={logout} />
+            </ProtectedRoute>
+          } 
+        />
+        {/* Protected Quiz Routes - keep these protected */}
+        <Route 
+          path="/quiz/topic/:topicId" 
+          element={
+            <ProtectedRoute>
+              <TopicQuizPage logout={logout} />
             </ProtectedRoute>
           } 
         />
@@ -212,7 +191,7 @@ const AppContent = () => {
           path="/quiz/:topicId/section/:sectionId" 
           element={
             <ProtectedRoute>
-              <TopicQuizPage logout={handleLogout} />
+              <TopicQuizPage logout={logout} />
             </ProtectedRoute>
           } 
         />
@@ -221,6 +200,57 @@ const AppContent = () => {
             <Settings />
           </ProtectedRoute>
         } />
+        {/* Protected Analytics Routes */}
+        <Route 
+          path="/user/analytics/overview" 
+          element={
+            <ProtectedRoute>
+              <AnalyticsOverview logout={logout} />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/user/analytics/subjects" 
+          element={
+            <ProtectedRoute>
+              <div>Subject Performance</div>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/user/analytics/history" 
+          element={
+            <ProtectedRoute>
+              <div>Learning History</div>
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Protected Awards Routes */}
+        <Route 
+          path="/user/awards/achievements" 
+          element={
+            <ProtectedRoute>
+              <Achievements logout={logout} />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/user/awards/badges" 
+          element={
+            <ProtectedRoute>
+              <div>Badges</div>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/user/awards/leaderboard" 
+          element={
+            <ProtectedRoute>
+              <div>Leaderboard</div>
+            </ProtectedRoute>
+          } 
+        />
         {/* Catch-all route to redirect unknown paths to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

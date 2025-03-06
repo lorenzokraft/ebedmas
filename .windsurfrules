@@ -1,0 +1,36 @@
+i am using mysql Ver 8.3.0 for Linux on x86_64 (Homebrew) for
+my database locally and mysql Ver 15.1 Distrib 10.6.20-MariaDB,
+for Linux (x86_64) using readline 5.1 on my hosting server.
+all your sql queries should be valid and compatible with both my local database and my hosting database.
+
+This is my Mysql tbales:
+mysql> show tables;
++-----------------------+
+| Tables_in_ebedmas     |
++-----------------------+
+| admin_users           |
+| admins                |
+| grade_id_mapping      |
+| grade_mapping         |
+| grades                |
+| learners              |
+| learning_categories   |
+| new_grades            |
+| payment_methods       |
+| question_images       |
+| question_options      |
+| questions             |
+| quizzes               |
+| school_quote_requests |
+| sections              |
+| subjects              |
+| subscription_logs     |
+| subscription_plans    |
+| subscription_settings |
+| subscriptions         |
+| topic_distribution    |
+| topic_grades          |
+| topic_year_mapping    |
+| topics                |
+| users                 |
++-----------------------+

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Star, Users, Trophy, Sparkles, Quote } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Footer from './Footer';
 import api from '../services/api';
 
@@ -131,7 +132,12 @@ const HomePage = () => {
                   {year.subjects.map(subject => (
                     <div key={subject.name} className="flex justify-between items-center">
                       <span>{subject.display_name}</span>
-                      <span className="text-blue-400">{subject.skills} skills →</span>
+                      <Link 
+                        to={`/user/learning/${subject.name.toLowerCase() === 'mathematics' ? 'mathematics' : subject.name.toLowerCase()}/year/${year.level}/topics`}
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        {subject.skills} skills →
+                      </Link>
                     </div>
                   ))}
                 </div>
