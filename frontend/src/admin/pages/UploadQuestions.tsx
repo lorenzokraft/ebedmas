@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AdminSidebar from '../components/AdminSidebar';
 import api from '../services/api';
 import Swal from 'sweetalert2';
+import { Type, Sigma } from 'lucide-react';
 
 interface Grade {
   id: number;
@@ -62,6 +63,62 @@ const UploadQuestions = () => {
   const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+
+  const [showSymbolPicker, setShowSymbolPicker] = useState(false);
+  const [showFormatOptions, setShowFormatOptions] = useState(false);
+
+  // Mathematical symbols organized by category
+  const symbolCategories = [
+    {
+      name: "Basic Math Operators",
+      symbols: ['+', '−', '×', '÷', '=', '≠', '±', '∓', '⋅', '∗', '⨯', '∕', '⁄', '⌿', '⟌']
+    },
+    {
+      name: "Binary Operators",
+      symbols: ['∧', '∨', '⊕', '⊗', '⊙', '⊘', '⊚', '⊛', '⊝', '⊞', '⊟', '⊠', '⊡', '◯', '⦁']
+    },
+    {
+      name: "N-ary Operators",
+      symbols: ['∏', '∐', '∑', '⋀', '⋁', '⋂', '⋃', '⨀', '⨁', '⨂', '⨃', '⨄', '⨅', '⨆', '⨉']
+    },
+    {
+      name: "Comparison",
+      symbols: ['<', '>', '≤', '≥', '≦', '≧', '≨', '≩', '≪', '≫', '≲', '≳', '≶', '≷', '⋚']
+    },
+    {
+      name: "Sets",
+      symbols: ['∈', '∉', '∊', '∋', '∌', '∍', '⊂', '⊃', '⊄', '⊅', '⊆', '⊇', '⊈', '⊉', '⊊']
+    },
+    {
+      name: "Calculus",
+      symbols: ['∫', '∬', '∭', '∮', '∯', '∰', '∱', '∲', '∳', '∂', '∇', '∆', 'δ', 'Δ', '∠']
+    },
+    {
+      name: "Greek Letters",
+      symbols: ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'ι', 'κ', 'λ', 'μ', 'ν', 'ξ', 'π']
+    },
+    {
+      name: "Arrows",
+      symbols: ['←', '→', '↑', '↓', '↔', '↕', '⇐', '⇒', '⇑', '⇓', '⇔', '⇕', '↦', '↤', '↼']
+    }
+  ];
+
+  const formatOptions = [
+    { label: 'Bold', wrapper: ['<strong>', '</strong>'], icon: 'bold' },
+    { label: 'Italic', wrapper: ['<em>', '</em>'], icon: 'italic' },
+    { label: 'Underline', wrapper: ['<u>', '</u>'], icon: 'underline' },
+    { label: 'Subscript', wrapper: ['<sub>', '</sub>'], icon: 'subscript' },
+    { label: 'Superscript', wrapper: ['<sup>', '</sup>'], icon: 'superscript' },
+    { label: 'New Line', wrapper: ['<br>', ''], icon: 'corner-down-right' },
+    { label: 'Bullet Point', wrapper: ['<br>• ', ''], icon: 'circle-dot' },
+    { label: 'Numbered List', wrapper: ['<br>1. ', ''], icon: 'list-ordered' },
+    { label: 'Primary Color', wrapper: ['<span style="color: #4F46E5;">', '</span>'], icon: 'palette' },
+    { label: 'Secondary Color', wrapper: ['<span style="color: #1D4ED8;">', '</span>'], icon: 'palette' },
+    { label: 'Success Color', wrapper: ['<span style="color: #059669;">', '</span>'], icon: 'palette' },
+    { label: 'Warning Color', wrapper: ['<span style="color: #D97706;">', '</span>'], icon: 'palette' },
+    { label: 'Danger Color', wrapper: ['<span style="color: #DC2626;">', '</span>'], icon: 'palette' }
+  ];
+
   const navigate = useNavigate();
 
   const handleQuestionImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,7 +159,6 @@ const UploadQuestions = () => {
     try {
       const formDataToSend = new FormData();
 
-      // Validate required fields
       if (!formData.question_text || !formData.correct_answer || 
           !formData.grade_id || !formData.subject_id || 
           !formData.topic_id || !formData.section_id) {
@@ -112,7 +168,6 @@ const UploadQuestions = () => {
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== undefined && value !== '') {
           if (key === 'options') {
-            // Format options as array of objects for all question types
             const formattedOptions = value.filter((opt: string) => opt.trim() !== '').map((opt: string, index: number) => ({
               id: index + 1,
               text: opt.trim(),
@@ -133,15 +188,11 @@ const UploadQuestions = () => {
         formDataToSend.append('explanation_image', explanationImage);
       }
 
-      console.log('Sending form data:', Object.fromEntries(formDataToSend));
-
       const response = await api.post('/api/admin/questions', formDataToSend, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
-      console.log('Server response:', response.data);
 
       setFormData({
         question_text: '',
@@ -181,6 +232,45 @@ const UploadQuestions = () => {
     }
   };
 
+  const insertSymbol = (symbol: string) => {
+    const textArea = document.getElementById('question-text') as HTMLTextAreaElement;
+    if (textArea) {
+      const start = textArea.selectionStart;
+      const end = textArea.selectionEnd;
+      const text = formData.question_text;
+      const newText = text.substring(0, start) + symbol + text.substring(end);
+      setFormData({ ...formData, question_text: newText });
+      setTimeout(() => {
+        textArea.focus();
+        textArea.setSelectionRange(start + symbol.length, start + symbol.length);
+      }, 0);
+    }
+    setShowSymbolPicker(false);
+  };
+
+  const formatText = (option: { label: string; wrapper: string[] }) => {
+    const textarea = document.getElementById('question-text') as HTMLTextAreaElement;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.question_text.substring(start, end);
+    
+    const newText = 
+      formData.question_text.substring(0, start) +
+      option.wrapper[0] + selectedText + option.wrapper[1] +
+      formData.question_text.substring(end);
+    
+    setFormData({ ...formData, question_text: newText });
+    
+    // Keep focus and selection
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(
+        start + option.wrapper[0].length,
+        end + option.wrapper[0].length
+      );
+    }, 0);
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -210,7 +300,6 @@ const UploadQuestions = () => {
         try {
           const response = await api.get(`/api/admin/subjects/${formData.subject_id}/topics`);
           setTopics(response.data);
-          // Reset topic and section when subject changes
           setFormData(prev => ({ ...prev, topic_id: '', section_id: '' }));
         } catch (error) {
           console.error('Error fetching topics:', error);
@@ -254,59 +343,113 @@ const UploadQuestions = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <AdminSidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-8">
+    <div className="min-h-screen bg-gray-100">
+      <div className="flex">
+        <AdminSidebar />
+        <div className="flex-1 p-8">
           <h1 className="text-2xl font-bold mb-6">Upload New Question</h1>
-          <form onSubmit={handleSubmit} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-            {/* Question Text with Upload Button */}
-            <div className="mb-4 relative">
-              <label className="block text-gray-700 text-sm font-bold mb-2">
-                Question Text
-              </label>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="relative mb-8">
               <textarea
+                id="question-text"
                 value={formData.question_text}
                 onChange={(e) => setFormData({ ...formData, question_text: e.target.value })}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                rows={4}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm min-h-[150px] p-4"
                 placeholder="Enter your question here..."
               />
-              <div className="absolute bottom-2 right-2">
+              <div className="absolute bottom-4 right-4 flex space-x-3">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowFormatOptions(!showFormatOptions)}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  >
+                    <Type className="w-4 h-4 mr-2" />
+                    Format Text
+                  </button>
+                  {showFormatOptions && (
+                    <div className="absolute top-full left-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                      <div className="py-1">
+                        {formatOptions.map((option) => (
+                          <button
+                            key={option.label}
+                            type="button"
+                            onClick={() => formatText(option)}
+                            className="flex items-center w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 transition-colors duration-150"
+                          >
+                            <span className="w-6">
+                              {option.icon === 'palette' ? (
+                                <div 
+                                  className="w-3 h-3 rounded-full" 
+                                  style={{ 
+                                    backgroundColor: option.wrapper[0].match(/color: ([^;]+)/)?.[1] || 'currentColor'
+                                  }} 
+                                />
+                              ) : option.icon === 'corner-down-right' ? (
+                                <span className="text-gray-500">↵</span>
+                              ) : option.icon === 'circle-dot' ? (
+                                <span className="text-gray-500">•</span>
+                              ) : option.icon === 'list-ordered' ? (
+                                <span className="text-gray-500">1.</span>
+                              ) : null}
+                            </span>
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSymbolPicker(!showSymbolPicker)}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  >
+                    <Sigma className="w-4 h-4 mr-2" />
+                    Insert Symbol
+                  </button>
+                  {showSymbolPicker && (
+                    <div className="absolute top-full right-0 mt-2 w-[480px] max-h-[400px] overflow-y-auto p-4 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                      {symbolCategories.map((category, categoryIndex) => (
+                        <div key={categoryIndex} className="mb-4 last:mb-0">
+                          <h3 className="text-sm font-medium text-gray-700 mb-2">{category.name}</h3>
+                          <div className="grid grid-cols-10 gap-2">
+                            {category.symbols.map((symbol, index) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => insertSymbol(symbol)}
+                                className="inline-flex items-center justify-center w-10 h-10 text-base border border-gray-200 rounded hover:bg-blue-50 hover:border-blue-200 transition-colors duration-150"
+                                title={symbol}
+                              >
+                                {symbol}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('question-image')?.click()}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                >
+                  Upload Image
+                </button>
                 <input
                   type="file"
+                  id="question-image"
                   multiple
                   accept="image/*"
                   onChange={handleQuestionImagesChange}
                   className="hidden"
-                  id="questionImages"
                 />
-                <label
-                  htmlFor="questionImages"
-                  className="bg-blue-500 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-600 transition-colors"
-                >
-                  Upload Image
-                </label>
               </div>
-              {questionImages.length > 0 && (
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  {questionImages.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={URL.createObjectURL(image)}
-                        alt={`Preview ${index + 1}`}
-                        className="h-20 w-20 object-cover rounded"
-                      />
-                      <button
-                        onClick={() => removeQuestionImage(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Question Type */}
@@ -519,7 +662,7 @@ const UploadQuestions = () => {
             </div>
           </form>
         </div>
-      </main>
+      </div>
     </div>
   );
 };
