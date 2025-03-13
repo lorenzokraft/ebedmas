@@ -12,6 +12,7 @@
     "build": "npm run clean && npm run build:backend && npm run build:frontend",
     "setup-admin": "tsx backend/src/scripts/setupAdmin.ts",
     "setup-test-user": "tsx backend/src/scripts/setupTestUser.ts",
+    "migrate": "tsx backend/src/db/runMigrations.ts",
     "clean": "rm -rf dist dist-frontend"
   },
   "dependencies": {
