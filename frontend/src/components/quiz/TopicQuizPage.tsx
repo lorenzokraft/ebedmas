@@ -31,7 +31,7 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
   const { topicId } = useParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [timer, setTimer] = useState(300);
+  const [timer, setTimer] = useState(300); // 5 minutes countdown
   const [isPaused, setIsPaused] = useState(false);
   const [dragItems, setDragItems] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
@@ -49,6 +49,81 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
   const [penColor, setPenColor] = useState('#000000');
   const [penSize, setPenSize] = useState(2);
   const lastPos = React.useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+
+  // Define handleNextQuestion early since it's used by handleTimeUp
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      const nextIndex = currentQuestionIndex + 1;
+      setCurrentQuestionIndex(nextIndex);
+      setSelectedAnswer('');
+      setDroppedItems([]);
+      setIsAnswerSubmitted(false);
+      setIsCorrect(null);
+      // Reset timer for next question
+      setTimer(300);
+      
+      // Reset drag items for next question if it's a drag type
+      const nextQuestion = questions[nextIndex];
+      if (nextQuestion && nextQuestion.type === 'drag' && nextQuestion.options) {
+        setDragItems(nextQuestion.options.map(opt => opt.text));
+      }
+    }
+  };
+
+  // Function to handle when time is up
+  const handleTimeUp = () => {
+    try {
+      const currentQuestion = questions[currentQuestionIndex];
+      if (!currentQuestion) return;
+
+      // Show alert that time is up
+      swal({
+        title: "Time's Up!",
+        text: "You ran out of time for this question.",
+        icon: "warning",
+        buttons: {
+          confirm: {
+            text: "Next Question",
+            value: true,
+            visible: true,
+            className: "bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg",
+          }
+        }
+      }).then(() => {
+        // Move to next question
+        handleNextQuestion();
+      });
+
+      // Update score (subtract points for missed question)
+      setScore(prevScore => Math.max(0, prevScore - 5));
+      
+      // Reset for next question
+      setSelectedAnswer('');
+      setIsAnswerSubmitted(true);
+      setIsCorrect(false);
+      
+    } catch (error) {
+      console.error('Error handling time up:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!isPaused && !isAnswerSubmitted) {
+      const interval = setInterval(() => {
+        setTimer(prev => {
+          // If timer reaches 0, auto-submit as a failed attempt
+          if (prev <= 1) {
+            clearInterval(interval);
+            // Mark the question as failed and move to next question
+            handleTimeUp();
+            return 0;
+          }
+          return prev - 1; // Count down instead of up
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isPaused, isAnswerSubmitted, currentQuestionIndex, questions]);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -149,15 +224,6 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
       fetchQuestions();
     }
   }, [topicId]);
-
-  useEffect(() => {
-    if (!isPaused) {
-      const interval = setInterval(() => {
-        setTimer(prev => prev + 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isPaused]);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -329,21 +395,6 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
       window.speechSynthesis.speak(utterance);
     } else {
       console.warn('Text-to-speech not supported in this browser');
-    }
-  };
-
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-      setSelectedAnswer('');
-      setDroppedItems([]);
-      setIsAnswerSubmitted(false);
-      setIsCorrect(null);
-      
-      // Reset drag items for next question if it's a drag type
-      if (questions[currentQuestionIndex + 1]?.type === 'drag' && questions[currentQuestionIndex + 1].options) {
-        setDragItems(questions[currentQuestionIndex + 1].options.map(opt => opt.text));
-      }
     }
   };
 
