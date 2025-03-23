@@ -56,10 +56,13 @@ const getSubscriptionDetails = async (userId: number): Promise<SubscriptionDetai
         plan: 'Free',
         type: 'monthly',
         maxLearners: 0,
+        additionalLearners: 0,
         subjects: [],
+        price: 0,
+        billingEmail: '',
         nextBillingDate: new Date().toISOString(),
-        cardLastFour: null,
-        cardHolderName: null
+        cardLastFour: undefined,
+        cardHolderName: undefined
       };
     }
 
@@ -97,11 +100,14 @@ const getSubscriptionDetails = async (userId: number): Promise<SubscriptionDetai
       nextBillingDate = subscription.end_date;
     }
 
-    const result = {
+    const result: SubscriptionDetails = {
       plan: planDisplayNames[subscription.plan_type] || subscription.plan_type,
-      type: subscription.billing_cycle,
+      type: subscription.billing_cycle || 'monthly',
       maxLearners: parseInt(subscription.children_count) || 0,
+      additionalLearners: 0, // Default value
       subjects,
+      price: 0, // Default value
+      billingEmail: '', // Default value
       nextBillingDate,
       cardLastFour: subscription.card_last_four,
       cardHolderName: subscription.card_holder_name
@@ -501,21 +507,73 @@ export const changePassword = async (req: Request, res: Response) => {
 export const checkEmailExists = async (req: Request, res: Response) => {
   try {
     const { email } = req.query;
-
+    
     if (!email) {
       return res.status(400).json({ message: 'Email is required' });
     }
-
-    const [users] = await pool.query(
+    
+    const [users] = await pool.query<RowDataPacket[]>(
       'SELECT id FROM users WHERE email = ?',
       [email]
     );
-
-    const exists = Array.isArray(users) && users.length > 0;
-
-    res.json({ exists });
+    
+    res.json({ exists: users.length > 0 });
   } catch (error) {
     console.error('Error checking email:', error);
-    res.status(500).json({ message: 'Server error checking email' });
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getUserQuizMetrics = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    console.log('Getting quiz metrics for user:', userId);
+    
+    // Calculate date 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+    
+    // Query to get total score, questions answered, and time spent in the last 30 days
+    // Using the actual table structure
+    const [metrics] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+        SUM(score) as total_score,
+        COUNT(id) as total_questions,
+        SUM(time_spent) as total_time_spent
+      FROM quiz_progress
+      WHERE user_id = ? AND created_at >= ?`,
+      [userId, thirtyDaysAgoStr]
+    );
+    
+    if (!metrics || metrics.length === 0) {
+      return res.json({
+        totalScore: 0,
+        totalQuestions: 0,
+        totalTimeSpent: 0,
+        formattedTimeSpent: '0h 0m'
+      });
+    }
+    
+    const metric = metrics[0];
+    
+    // Format time spent (convert seconds to hours and minutes)
+    const totalSeconds = metric.total_time_spent || 0;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const formattedTimeSpent = `${hours}h ${minutes}m`;
+    
+    const response = {
+      totalScore: metric.total_score || 0,
+      totalQuestions: metric.total_questions || 0,
+      totalTimeSpent: totalSeconds,
+      formattedTimeSpent
+    };
+    
+    console.log('Sending metrics response:', response);
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching quiz metrics:', error);
+    res.status(500).json({ message: 'Failed to fetch quiz metrics' });
   }
 };

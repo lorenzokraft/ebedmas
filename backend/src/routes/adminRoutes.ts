@@ -1,6 +1,6 @@
 import express, { RequestHandler } from 'express';
-import { authenticateAdmin } from '../middleware/authMiddleware';
-import upload from '../middleware/uploadMiddleware';
+import { authenticateAdmin } from '../middleware/authMiddleware.js';
+import upload from '../middleware/uploadMiddleware.js';
 import {
   createQuestion,
   updateQuestion,
@@ -38,7 +38,7 @@ import {
   removeSectionById,
   getSectionsByTopicId,
   getSubjectsByGrade
-} from '../controllers/adminController';
+} from '../controllers/adminController.js';
 
 const router = express.Router();
 

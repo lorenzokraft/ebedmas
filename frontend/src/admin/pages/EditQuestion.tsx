@@ -4,11 +4,17 @@ import AdminSidebar from '../components/AdminSidebar';
 import api from '../services/api';
 import Swal from 'sweetalert2';
 
+interface QuestionOption {
+  id: number;
+  text: string;
+  isCorrect: boolean;
+}
+
 interface Question {
   id: number;
   question_text: string;
   question_type: string;
-  options: string[];
+  options: QuestionOption[];
   correct_answer: string;
   explanation: string;
   grade_id: number;
@@ -36,12 +42,18 @@ const EditQuestion = () => {
           api.get('/api/admin/subjects')
         ]);
 
-        setQuestion(questionRes.data);
+        // Parse options if they're stored as a string
+        const questionData = questionRes.data;
+        if (typeof questionData.options === 'string') {
+          questionData.options = JSON.parse(questionData.options);
+        }
+
+        setQuestion(questionData);
         setGrades(gradesRes.data);
         setSubjects(subjectsRes.data);
 
-        if (questionRes.data.subject_id) {
-          const topicsRes = await api.get(`/api/admin/subjects/${questionRes.data.subject_id}/topics`);
+        if (questionData.subject_id) {
+          const topicsRes = await api.get(`/api/admin/subjects/${questionData.subject_id}/topics`);
           setTopics(topicsRes.data);
         }
       } catch (error) {
@@ -67,7 +79,17 @@ const EditQuestion = () => {
     if (!question) return;
 
     try {
-      await api.put(`/api/admin/questions/${id}`, question);
+      // Format options as array of objects
+      const formattedQuestion = {
+        ...question,
+        options: question.options.map((opt, index) => ({
+          id: index + 1,
+          text: opt.text,
+          isCorrect: opt.text === question.correct_answer
+        }))
+      };
+
+      await api.put(`/api/admin/questions/${id}`, formattedQuestion);
 
       Swal.fire({
         title: 'Success!',
@@ -86,6 +108,30 @@ const EditQuestion = () => {
         confirmButtonColor: '#EF4444',
       });
     }
+  };
+
+  const handleOptionsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (!question) return;
+
+    // Split by newline and filter out empty lines
+    const optionLines = e.target.value.split('\n').filter(line => line.trim());
+    
+    // Convert simple text options to structured format
+    const options = optionLines.map((text, index) => ({
+      id: index + 1,
+      text: text.trim(),
+      isCorrect: text.trim() === question.correct_answer
+    }));
+
+    setQuestion({
+      ...question,
+      options: options
+    });
+  };
+
+  const formatOptionsForDisplay = (options: QuestionOption[]): string => {
+    // Convert options to simple text format, one per line
+    return options.map(opt => opt.text).join('\n');
   };
 
   const handleSubjectChange = async (subjectId: string) => {
@@ -227,11 +273,15 @@ const EditQuestion = () => {
                 Options (one per line)
               </label>
               <textarea
-                value={question.options.join('\n')}
-                onChange={(e) => setQuestion({ ...question, options: e.target.value.split('\n') })}
+                value={formatOptionsForDisplay(question.options)}
+                onChange={handleOptionsChange}
                 className="w-full p-2 border rounded-md"
-                rows={4}
+                rows={6}
+                placeholder="Enter each option on a new line, e.g:&#10;A&#10;B&#10;C&#10;D"
               />
+              <p className="mt-1 text-sm text-gray-500">
+                Enter each option on a new line. The option matching the correct answer will be automatically marked as correct.
+              </p>
             </div>
 
             {/* Correct Answer */}
@@ -242,7 +292,17 @@ const EditQuestion = () => {
               <input
                 type="text"
                 value={question.correct_answer}
-                onChange={(e) => setQuestion({ ...question, correct_answer: e.target.value })}
+                onChange={(e) => {
+                  const newAnswer = e.target.value;
+                  setQuestion({
+                    ...question,
+                    correct_answer: newAnswer,
+                    options: question.options.map(opt => ({
+                      ...opt,
+                      isCorrect: opt.text === newAnswer
+                    }))
+                  });
+                }}
                 className="w-full p-2 border rounded-md"
                 required
               />
@@ -283,4 +343,4 @@ const EditQuestion = () => {
   );
 };
 
-export default EditQuestion; 
+export default EditQuestion;

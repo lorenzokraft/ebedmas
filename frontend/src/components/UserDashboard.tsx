@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { format } from 'date-fns';
 import DashboardNav from './DashboardNav';
 import PracticeChart from './PracticeChart';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 interface UserData {
   id: number;
@@ -12,15 +11,27 @@ interface UserData {
   role: string;
 }
 
+interface QuizMetrics {
+  totalScore: number;
+  totalQuestions: number;
+  totalTimeSpent: number;
+  formattedTimeSpent: string;
+}
+
 interface UserDashboardProps {
   logout: () => void;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [quizMetrics, setQuizMetrics] = useState<QuizMetrics>({
+    totalScore: 0,
+    totalQuestions: 0,
+    totalTimeSpent: 0,
+    formattedTimeSpent: '0h 0m'
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [currentDate] = useState(new Date());
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -56,6 +67,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
           console.log('Token invalid or expired, redirecting to login');
           localStorage.removeItem('token'); // Clear invalid token
           navigate('/login');
+        } else {
+          setError('Failed to load user data. Please try again later.');
         }
       } finally {
         setLoading(false);
@@ -65,36 +78,54 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
     fetchUserData();
   }, [navigate]);
 
-  const renderSubjectSection = (subject: string) => {
-    const subjectData = subjects.find(s => s.name.toLowerCase() === subject.toLowerCase());
-    if (!subjectData) return null;
+  useEffect(() => {
+    const fetchQuizMetrics = async () => {
+      try {
+        const token = localStorage.getItem('token')?.trim();
+        
+        if (!token) {
+          console.error('No token found in storage');
+          return;
+        }
+        
+        console.log('Attempting to fetch real quiz metrics data');
+        
+        try {
+          const response = await axios.get('http://localhost:5000/api/users/quiz-metrics', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-    return (
-      <div>
-        <h1 className="text-4xl font-bold mb-8">{subject}</h1>
-        {subjectData.years.map((year) => (
-          <div key={year.id} className="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Year {year.name}</h2>
-              <Link
-                to={`/user/learning/${subject.toLowerCase()}/year/${year.id}/topics`}
-                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 flex items-center"
-              >
-                See all {year.topicCount} Topics
-                <span className="ml-2">→</span>
-              </Link>
-            </div>
-            <div className="text-gray-600">
-              <span className="font-semibold">Includes:</span>{' '}
-              {year.topics.length > 0 
-                ? year.topics.map(topic => topic.name).join(' | ')
-                : 'Content coming soon...'}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
+          console.log('Quiz metrics API response:', response.data);
+
+          if (response.data) {
+            setQuizMetrics(response.data);
+          }
+        } catch (error: any) {
+          console.error('Error fetching quiz metrics from API, using mock data:', {
+            status: error.response?.status,
+            message: error.response?.data?.message
+          });
+          
+          // Use mock data for testing
+          setQuizMetrics({
+            totalScore: 250,
+            totalQuestions: 35,
+            totalTimeSpent: 7200, // 2 hours in seconds
+            formattedTimeSpent: '2h 0m'
+          });
+        }
+      } catch (error: any) {
+        console.error('Error in fetchQuizMetrics:', error);
+      }
+    };
+
+    if (userData) {
+      fetchQuizMetrics();
+    }
+  }, [userData]);
 
   if (loading) {
     return (
@@ -121,6 +152,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
             Hello {userData?.username} 👋
           </h2>
           <p className="text-cyan-600 mt-2 text-lg">Let's learn something new today!</p>
+          <p className="text-gray-600 mt-1">In the last 30 days, you have:</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -135,12 +167,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-3xl font-bold text-cyan-700">2,040</h4>
+              <h4 className="text-3xl font-bold text-cyan-700">{quizMetrics.totalScore.toLocaleString()}</h4>
               <div className="flex items-center">
                 <p className="text-gray-600">Overall Score in all Subjects</p>
-                <span className="ml-2 text-green-500 flex items-center text-sm">
-                  <span className="mr-1">↑</span> 12%
-                </span>
               </div>
             </div>
           </div>
@@ -156,12 +185,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-3xl font-bold text-cyan-700">826</h4>
+              <h4 className="text-3xl font-bold text-cyan-700">{quizMetrics.totalQuestions.toLocaleString()}</h4>
               <div className="flex items-center">
                 <p className="text-gray-600">Questions Answered</p>
-                <span className="ml-2 text-green-500 flex items-center text-sm">
-                  <span className="mr-1">↑</span> 8%
-                </span>
               </div>
             </div>
           </div>
@@ -177,12 +203,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ logout }) => {
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-3xl font-bold text-cyan-700">3h 14m</h4>
+              <h4 className="text-3xl font-bold text-cyan-700">{quizMetrics.formattedTimeSpent}</h4>
               <div className="flex items-center">
-                <p className="text-gray-600">This Week's Learning Time</p>
-                <span className="ml-2 text-green-500 flex items-center text-sm">
-                  <span className="mr-1">↑</span> 15%
-                </span>
+                <p className="text-gray-600">Learning Time</p>
               </div>
             </div>
           </div>

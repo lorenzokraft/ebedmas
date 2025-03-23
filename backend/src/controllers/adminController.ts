@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import pool from '../utils/db';
+import pool from '../utils/db.js';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { AuthenticatedRequest } from '../types/express.js';
 
 interface AdminUser extends RowDataPacket {
   id: number;
@@ -13,10 +15,6 @@ interface AdminUser extends RowDataPacket {
   password: string;
   role: string;
   status: string;
-}
-
-interface AuthenticatedRequest extends Request {
-  user?: any;
 }
 
 async function login(req: Request, res: Response) {
@@ -202,8 +200,8 @@ async function getUsers(req: Request, res: Response) {
 
 async function getGrades(req: Request, res: Response) {
   try {
-    const adminId = req.user?.id;
-    if (!adminId) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
@@ -312,140 +310,33 @@ async function getTopicsBySubject(req: Request, res: Response) {
 
 async function createQuestion(req: Request, res: Response) {
   try {
-    console.log('Request body:', req.body);
-    console.log('Request files:', req.files);
-    
-    const {
-      question_text,
-      question_type,
-      options,
-      correct_answer,
-      explanation,
-      grade_id,
-      subject_id,
-      topic_id,
-      section_id,
-      order_num,
-      audio_url
-    } = req.body;
-
-    const adminId = (req as AuthenticatedRequest).user?.id;
-
-    // Generate a slug from the question text
-    const generateSlug = (text: string): string => {
-      return text
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric chars with hyphens
-        .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
-        .substring(0, 50) + // Limit length
-        '-' +
-        Date.now(); // Add timestamp to ensure uniqueness
-    };
-
-    const slug = generateSlug(question_text);
-
-    // Validate question type
-    const validTypes = ['text', 'draw', 'paint', 'drag', 'click'];
-    if (!validTypes.includes(question_type)) {
-      return res.status(400).json({ 
-        message: 'Invalid question type. Must be one of: ' + validTypes.join(', ')
+    const userId = (req as AuthenticatedRequest).user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        message: 'Unauthorized: Admin ID not found'
       });
     }
 
     // Validate required fields
-    if (!question_text || !correct_answer || !grade_id || !subject_id || !topic_id || !section_id) {
-      return res.status(400).json({ 
-        message: 'Missing required fields',
-        receivedFields: {
-          question_text: !!question_text,
-          correct_answer: !!correct_answer,
-          grade_id: !!grade_id,
-          subject_id: !!subject_id,
-          topic_id: !!topic_id,
-          section_id: !!section_id
-        }
-      });
-    }
-
-    // Handle uploaded files
-    let imagesArray = null;
-    let explanation_image = null;
-
-    if (req.files) {
-      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-      console.log('Processing files:', files);
-      
-      // Handle question images
-      if (files.images) {
-        imagesArray = files.images.map(file => `/uploads/questions/${file.filename}`);
-        console.log('Saved images paths:', imagesArray);
-      }
-
-      // Handle explanation image
-      if (files.explanation_image && files.explanation_image[0]) {
-        explanation_image = `/uploads/questions/${files.explanation_image[0].filename}`;
-        console.log('Saved explanation image path:', explanation_image);
-      }
-    }
-
-    // Parse and validate options
-    let formattedOptions;
-    try {
-      // Parse options if it's a string
-      const parsedOptions = typeof options === 'string' ? JSON.parse(options) : options;
-      
-      // Ensure it's an array
-      if (!Array.isArray(parsedOptions)) {
-        throw new Error('Options must be an array');
-      }
-
-      // Validate each option object
-      formattedOptions = parsedOptions.map(opt => {
-        if (typeof opt !== 'object' || !opt.text) {
-          throw new Error('Each option must be an object with a text property');
-        }
-        return {
-          id: opt.id || 0,
-          text: opt.text.trim(),
-          isCorrect: opt.isCorrect || false
-        };
-      });
-
-      // Convert to string for storage
-      formattedOptions = JSON.stringify(formattedOptions);
-    } catch (error) {
-      console.error('Error parsing options:', error, { 
-        receivedOptions: options,
-        questionType: question_type 
-      });
-      return res.status(400).json({ 
-        message: 'Invalid options format',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        receivedOptions: options,
-        questionType: question_type
-      });
-    }
-
-    console.log('Attempting to insert question with data:', {
+    const { 
       question_text,
       question_type,
-      formattedOptions,
+      options,
       correct_answer,
-      explanation,
       grade_id,
       subject_id,
       topic_id,
-      section_id,
-      order_num,
-      adminId,
-      audio_url,
-      images: imagesArray,
-      explanation_image,
-      slug
-    });
+      section_id
+    } = req.body;
 
-    // Verify section exists and belongs to the topic
-    const [sectionCheck] = await pool.query<RowDataPacket[]>(
+    if (!question_text || !question_type || !correct_answer || !grade_id || !subject_id || !topic_id) {
+      return res.status(400).json({
+        message: 'Required fields are missing'
+      });
+    }
+
+    // Verify that the section belongs to the selected topic
+    const [sectionCheck] = await pool.execute<RowDataPacket[]>(
       'SELECT id FROM sections WHERE id = ? AND topic_id = ?',
       [section_id, topic_id]
     );
@@ -456,8 +347,15 @@ async function createQuestion(req: Request, res: Response) {
       });
     }
 
-    // Insert question into database
-    const [result] = await pool.query<ResultSetHeader>(
+    // Add created_by to the request body
+    const questionData = {
+      ...req.body,
+      created_by: userId,
+      slug: uuidv4() // Generate a unique slug for the question
+    };
+
+    // Insert question into database using parameterized query for SQL injection protection
+    const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO questions (
         question_text,
         question_type,
@@ -468,29 +366,23 @@ async function createQuestion(req: Request, res: Response) {
         subject_id,
         topic_id,
         section_id,
-        order_num,
         created_by,
-        audio_url,
-        images,
-        explanation_image,
-        slug
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        slug,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
-        question_text,
-        question_type,
-        formattedOptions,
-        correct_answer,
-        explanation,
-        grade_id,
-        subject_id,
-        topic_id,
-        section_id,
-        order_num || 0,
-        adminId,
-        audio_url || null,
-        imagesArray ? JSON.stringify(imagesArray) : null,
-        explanation_image,
-        slug
+        questionData.question_text,
+        questionData.question_type,
+        JSON.stringify(questionData.options),
+        questionData.correct_answer,
+        questionData.explanation || null,
+        questionData.grade_id,
+        questionData.subject_id,
+        questionData.topic_id,
+        questionData.section_id,
+        questionData.created_by,
+        questionData.slug
       ]
     );
 
@@ -514,10 +406,10 @@ async function createQuestion(req: Request, res: Response) {
 async function createTopic(req: Request, res: Response) {
   try {
     const { name, description, subject_id, grade_id } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Validate required fields
-    if (!name || !subject_id || !grade_id || !adminId) {
+    if (!name || !subject_id || !grade_id || !userId) {
       return res.status(400).json({ 
         message: 'Topic name, subject, and grade are required' 
       });
@@ -526,7 +418,7 @@ async function createTopic(req: Request, res: Response) {
     // Insert topic into database with created_by and grade_id
     const [result] = await pool.query<ResultSetHeader>(
       'INSERT INTO topics (name, description, subject_id, created_by, grade_id) VALUES (?, ?, ?, ?, ?)',
-      [name, description || null, subject_id, adminId, grade_id]
+      [name, description || null, subject_id, userId, grade_id]
     );
 
     console.log('Topic created:', {
@@ -534,7 +426,7 @@ async function createTopic(req: Request, res: Response) {
       description,
       subject_id,
       grade_id,
-      adminId,
+      userId,
       topicId: result.insertId
     });
 
@@ -612,7 +504,7 @@ async function deleteTopic(req: Request, res: Response) {
 async function getTopicById(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Get topic with authorization check
     const [topics] = await pool.query<RowDataPacket[]>(
@@ -629,7 +521,7 @@ async function getTopicById(req: Request, res: Response) {
       LEFT JOIN subjects s ON t.subject_id = s.id
       LEFT JOIN grades g ON t.grade_id = g.id
       WHERE t.id = ? AND (t.created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!topics[0]) {
@@ -647,12 +539,12 @@ async function updateTopic(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name, subject_id, grade_id } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if topic exists and user has permission
     const [existingTopic] = await pool.query<RowDataPacket[]>(
       'SELECT * FROM topics WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = "super_admin"))',
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!existingTopic[0]) {
@@ -674,7 +566,7 @@ async function updateTopic(req: Request, res: Response) {
 async function createSubject(req: Request, res: Response) {
   try {
     const { name } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Validate required fields
     if (!name) {
@@ -684,10 +576,7 @@ async function createSubject(req: Request, res: Response) {
     }
 
     // Insert subject into database
-    const [result] = await pool.query(
-      'INSERT INTO subjects (name, created_by) VALUES (?, ?)',
-      [name, adminId]
-    );
+    const result = await pool.query('INSERT INTO subjects SET ?', [req.body]) as unknown as { insertId: number };
 
     res.status(201).json({
       message: 'Subject created successfully',
@@ -706,13 +595,13 @@ async function updateSubject(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if subject exists and admin has permission
     const [subjects] = await pool.query<RowDataPacket[]>(
       `SELECT * FROM subjects 
        WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!subjects[0]) {
@@ -734,13 +623,13 @@ async function updateSubject(req: Request, res: Response) {
 async function deleteSubject(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if subject exists and admin has permission
     const [subjects] = await pool.query<RowDataPacket[]>(
       `SELECT * FROM subjects 
        WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!subjects[0]) {
@@ -763,9 +652,9 @@ async function deleteSubject(req: Request, res: Response) {
 async function createGrade(req: Request, res: Response) {
   try {
     const { name } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
-    if (!name || !adminId) {
+    if (!name || !userId) {
       return res.status(400).json({ message: 'Grade name is required' });
     }
 
@@ -805,10 +694,7 @@ async function createGrade(req: Request, res: Response) {
     }
 
     // Insert the new grade with the specific ID
-    const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO grades (id, name, created_by) VALUES (?, ?, ?)',
-      [yearId, formattedName, adminId]
-    );
+    const result = await pool.query('INSERT INTO grades SET ?', [req.body]) as unknown as { insertId: number };
 
     res.status(201).json({
       message: 'Grade created successfully',
@@ -830,13 +716,13 @@ async function updateGrade(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if grade exists and admin has permission
     const [grades] = await pool.query<RowDataPacket[]>(
       `SELECT * FROM grades 
        WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!grades[0]) {
@@ -858,13 +744,13 @@ async function updateGrade(req: Request, res: Response) {
 async function deleteGrade(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if grade exists and admin has permission
     const [grades] = await pool.query<RowDataPacket[]>(
       `SELECT * FROM grades 
        WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!grades[0]) {
@@ -909,10 +795,11 @@ async function getQuestions(req: Request, res: Response) {
         q.created_at,
         q.updated_at,
         q.order_num,
-        g.name as grade_name,
-        s.name as subject_name,
-        t.name as topic_name,
-        a.name as created_by_name
+        q.audio_url,
+        g.name AS grade_name,
+        s.name AS subject_name,
+        t.name AS topic_name,
+        a.name AS created_by_name
       FROM questions q
       LEFT JOIN grades g ON q.grade_id = g.id
       LEFT JOIN subjects s ON q.subject_id = s.id
@@ -932,14 +819,36 @@ async function getQuestions(req: Request, res: Response) {
           parsedOptions = q.options.split(',').map(opt => opt.trim());
         } else if (typeof q.options === 'string') {
           try {
+            // Try to parse as JSON first
             parsedOptions = JSON.parse(q.options);
-          } catch {
-            parsedOptions = [q.options];
+          } catch (e) {
+            // If JSON parsing fails, try to handle legacy format
+            if (q.options.includes(',')) {
+              parsedOptions = q.options.split(',').map((text, id) => ({
+                id: id + 1,
+                text: text.trim(),
+                isCorrect: text.trim() === q.correct_answer
+              }));
+            } else {
+              // If all else fails, create a single option
+              parsedOptions = [{
+                id: 1,
+                text: q.options,
+                isCorrect: q.options === q.correct_answer
+              }];
+            }
           }
+        } else if (!Array.isArray(q.options)) {
+          // Convert non-array options to array format
+          parsedOptions = [{
+            id: 1,
+            text: String(q.options),
+            isCorrect: String(q.options) === q.correct_answer
+          }];
         }
       } catch (error) {
-        console.error('Error parsing options for question:', q.id, error);
-        parsedOptions = [];
+        console.error('Error parsing options:', error);
+        parsedOptions = []; // Fallback to empty array on error
       }
 
       return {
@@ -964,13 +873,13 @@ async function getQuestions(req: Request, res: Response) {
 async function deleteQuestion(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if question exists and admin has permission
     const [questions] = await pool.query<RowDataPacket[]>(
       `SELECT * FROM questions 
        WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!questions[0]) {
@@ -998,18 +907,19 @@ async function updateQuestion(req: Request, res: Response) {
       grade_id,
       subject_id,
       topic_id,
-      section_id,
       order_num,
       audio_url
     } = req.body;
 
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
-    // Check if question exists and admin has permission
-    const [questions] = await pool.query<RowDataPacket[]>(
-      `SELECT * FROM questions 
-       WHERE id = ? AND (created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+    // Check if question exists and admin has permission using explicit JOIN
+    const [questions] = await pool.execute<RowDataPacket[]>(
+      `SELECT q.* 
+       FROM questions q
+       INNER JOIN admin_users a ON q.created_by = a.id
+       WHERE q.id = ? AND (q.created_by = ? OR a.role = 'super_admin')`,
+      [id, userId]
     );
 
     if (!questions[0]) {
@@ -1027,12 +937,34 @@ async function updateQuestion(req: Request, res: Response) {
     // Get image path if uploaded
     const question_image = req.file ? `/uploads/questions/${req.file.filename}` : questions[0].question_image;
 
-    // Ensure options is properly formatted as JSON
-    const formattedOptions = Array.isArray(options) 
-      ? JSON.stringify(options)
-      : JSON.stringify([options]);
+    // Format options as JSON string
+    let formattedOptions;
+    try {
+      if (Array.isArray(options)) {
+        // Validate and format options array
+        const validatedOptions = options.map((opt: any, index: number) => {
+          if (!opt.text || typeof opt.text !== 'string') {
+            throw new Error(`Option ${index + 1} must have a valid text field`);
+          }
+          return {
+            id: index + 1,
+            text: opt.text.trim(),
+            isCorrect: opt.text.trim() === correct_answer
+          };
+        });
+        formattedOptions = JSON.stringify(validatedOptions);
+      } else {
+        throw new Error('Options must be an array');
+      }
+    } catch (error) {
+      return res.status(400).json({ 
+        message: 'Invalid options format',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
 
-    await pool.query(
+    // Update question using explicit column names and parameterized query
+    await pool.execute(
       `UPDATE questions SET 
         question_text = ?,
         question_type = ?,
@@ -1042,42 +974,47 @@ async function updateQuestion(req: Request, res: Response) {
         grade_id = ?,
         subject_id = ?,
         topic_id = ?,
-        section_id = ?,
-        order_num = ?,
+        order_num = COALESCE(?, 0),
         audio_url = ?,
-        question_image = ?
+        question_image = ?,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`,
       [
-        question_text,
-        question_type,
+        question_text || '',
+        question_type || 'text',
         formattedOptions,
-        correct_answer,
-        explanation,
-        grade_id,
-        subject_id,
-        topic_id,
-        section_id,
+        correct_answer || '',
+        explanation || '',
+        grade_id || null,
+        subject_id || null,
+        topic_id || null,
         order_num || 0,
         audio_url || null,
-        question_image,
+        question_image || null,
         id
       ]
     );
 
-    res.json({ message: 'Question updated successfully' });
+    res.json({ 
+      message: 'Question updated successfully',
+      questionId: id
+    });
   } catch (error) {
     console.error('Error updating question:', error);
-    res.status(500).json({ message: 'Failed to update question' });
+    res.status(500).json({ 
+      message: 'Failed to update question',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 };
 
 async function getQuestionById(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
-    // Get question with authorization check
-    const [questions] = await pool.query<RowDataPacket[]>(
+    // Get question with authorization check using explicit JOIN syntax
+    const [questions] = await pool.execute<RowDataPacket[]>(
       `SELECT 
         q.id,
         q.question_text,
@@ -1093,54 +1030,55 @@ async function getQuestionById(req: Request, res: Response) {
         q.updated_at,
         q.order_num,
         q.audio_url,
-        g.name as grade_name,
-        s.name as subject_name,
-        t.name as topic_name,
-        a.name as created_by_name
+        g.name AS grade_name,
+        s.name AS subject_name,
+        t.name AS topic_name,
+        a.name AS created_by_name
       FROM questions q
-      LEFT JOIN grades g ON q.grade_id = g.id
-      LEFT JOIN subjects s ON q.subject_id = s.id
-      LEFT JOIN topics t ON q.topic_id = t.id
-      LEFT JOIN admin_users a ON q.created_by = a.id
+      INNER JOIN grades g ON q.grade_id = g.id
+      INNER JOIN subjects s ON q.subject_id = s.id
+      INNER JOIN topics t ON q.topic_id = t.id
+      INNER JOIN admin_users a ON q.created_by = a.id
       WHERE q.id = ? AND (q.created_by = ? OR ? IN (SELECT id FROM admin_users WHERE role = 'super_admin'))`,
-      [id, adminId, adminId]
+      [id, userId, userId]
     );
 
     if (!questions[0]) {
       return res.status(404).json({ message: 'Question not found or unauthorized' });
     }
 
-    // Parse the options with error handling
-    let parsedOptions = [];
+    const question = questions[0];
+
+    // Parse the options with proper error handling
     try {
-      if (questions[0].options) {
-        // If options is a string with commas, split it
-        if (typeof questions[0].options === 'string' && questions[0].options.includes(',')) {
-          parsedOptions = questions[0].options.split(',').map(opt => opt.trim());
-        } else {
-          // Try to parse as JSON, if fails, wrap in array
-          try {
-            parsedOptions = JSON.parse(questions[0].options);
-          } catch {
-            parsedOptions = [questions[0].options];
+      if (question.options) {
+        if (typeof question.options === 'string') {
+          // If options is already a JSON string, validate it's an array
+          const parsedOptions = JSON.parse(question.options);
+          if (!Array.isArray(parsedOptions)) {
+            throw new Error('Options must be an array');
           }
+          question.options = parsedOptions; // Keep the original JSON string
+        } else if (Array.isArray(question.options)) {
+          // If options is an array, stringify it
+          question.options = JSON.stringify(question.options);
         }
+      } else {
+        // Initialize empty options array if none exist
+        question.options = [];
       }
     } catch (error) {
       console.error('Error parsing options:', error);
-      parsedOptions = [];
+      question.options = []; // Fallback to empty array on error
     }
-
-    // Return formatted question
-    const question = {
-      ...questions[0],
-      options: parsedOptions
-    };
 
     res.json(question);
   } catch (error) {
     console.error('Error fetching question:', error);
-    res.status(500).json({ message: 'Failed to fetch question' });
+    res.status(500).json({ 
+      message: 'Failed to fetch question',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 };
 
@@ -1225,17 +1163,7 @@ async function createAdmin(req: Request, res: Response) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create admin
-    const [result] = await pool.query(
-      `INSERT INTO admin_users (
-        name,
-        email,
-        password,
-        role,
-        status,
-        created_by
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, email, hashedPassword, role, 'active', creatorId || null]
-    );
+    const result = await pool.query('INSERT INTO admin_users SET ?', [req.body]) as unknown as { insertId: number };
 
     res.status(201).json({
       message: 'Administrator created successfully',
@@ -1251,12 +1179,12 @@ async function updateAdmin(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { name, email, password, role } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if updater is super_admin
     const [updater] = await pool.query<RowDataPacket[]>(
       'SELECT role FROM admin_users WHERE id = ?',
-      [adminId]
+      [userId]
     );
 
     if (!updater[0] || updater[0].role !== 'super_admin') {
@@ -1328,12 +1256,12 @@ async function updateAdmin(req: Request, res: Response) {
 async function deleteAdmin(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if deleter is super_admin
     const [deleter] = await pool.query<RowDataPacket[]>(
       'SELECT role FROM admin_users WHERE id = ?',
-      [adminId]
+      [userId]
     );
 
     if (!deleter[0] || deleter[0].role !== 'super_admin') {
@@ -1343,7 +1271,7 @@ async function deleteAdmin(req: Request, res: Response) {
     }
 
     // Prevent self-deletion
-    if (id === adminId.toString()) {
+    if (id === userId.toString()) {
       return res.status(400).json({ 
         message: 'Cannot delete your own account' 
       });
@@ -1363,12 +1291,12 @@ async function updateAdminStatus(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if updater is super_admin
     const [updater] = await pool.query<RowDataPacket[]>(
       'SELECT role FROM admin_users WHERE id = ?',
-      [adminId]
+      [userId]
     );
 
     if (!updater[0] || updater[0].role !== 'super_admin') {
@@ -1378,7 +1306,7 @@ async function updateAdminStatus(req: Request, res: Response) {
     }
 
     // Prevent self-status update
-    if (id === adminId.toString()) {
+    if (id === userId.toString()) {
       return res.status(400).json({ 
         message: 'Cannot update your own status' 
       });
@@ -1407,12 +1335,12 @@ async function updateAdminStatus(req: Request, res: Response) {
 async function getAdminById(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const adminId = (req as AuthenticatedRequest).user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     // Check if requester is super_admin
     const [requester] = await pool.query<RowDataPacket[]>(
       'SELECT role FROM admin_users WHERE id = ?',
-      [adminId]
+      [userId]
     );
 
     if (!requester[0] || requester[0].role !== 'super_admin') {

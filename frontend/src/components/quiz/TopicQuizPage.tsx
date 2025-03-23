@@ -1,12 +1,12 @@
 // This is our new component for topic-specific quizzes
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import DashboardNav from '../DashboardNav';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import publicApi from '../../admin/services/publicApi';
 import swal from 'sweetalert';
 import { Volume2 } from 'lucide-react';
-import { getImageUrl, getImageUrls } from '../../utils/imageUtils';
+import { getImageUrl } from '../../utils/imageUtils';
+import axios from 'axios';
 
 interface QuestionOption {
   id: number;
@@ -29,6 +29,7 @@ interface Question {
 
 const TopicQuizPage = ({ logout }: { logout: () => void }) => {
   const { topicId } = useParams();
+  const navigate = useNavigate();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timer, setTimer] = useState(300); // 5 minutes countdown
@@ -44,29 +45,43 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const contextRef = React.useRef<CanvasRenderingContext2D | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const [penColor, setPenColor] = useState('#000000');
   const [penSize, setPenSize] = useState(2);
-  const lastPos = React.useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  const lastPos = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
 
   // Define handleNextQuestion early since it's used by handleTimeUp
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      const nextIndex = currentQuestionIndex + 1;
-      setCurrentQuestionIndex(nextIndex);
-      setSelectedAnswer('');
-      setDroppedItems([]);
-      setIsAnswerSubmitted(false);
-      setIsCorrect(null);
-      // Reset timer for next question
-      setTimer(300);
+  const handleNextQuestion = async () => {
+    try {
+      const timeSpentOnQuestion = 300 - timer;
       
-      // Reset drag items for next question if it's a drag type
-      const nextQuestion = questions[nextIndex];
-      if (nextQuestion && nextQuestion.type === 'drag' && nextQuestion.options) {
-        setDragItems(nextQuestion.options.map(opt => opt.text));
+      // Only save progress if an answer was selected
+      if (selectedAnswer) {
+        await saveQuizProgress(selectedAnswer, timeSpentOnQuestion);
       }
+
+      // Move to next question regardless of answer
+      if (currentQuestionIndex < questions.length - 1) {
+        setCurrentQuestionIndex(prev => prev + 1);
+        setSelectedAnswer('');
+        setError('');
+        setTimer(300); // Reset timer for next question
+        setIsAnswerSubmitted(false); // Reset submission state
+        setIsCorrect(null); // Reset correct/incorrect state
+        setDroppedItems([]); // Reset drag items
+        
+        // Initialize drag items if next question is drag type
+        const nextQuestion = questions[currentQuestionIndex + 1];
+        if (nextQuestion?.type === 'drag' && nextQuestion.options) {
+          setDragItems(nextQuestion.options.map(opt => opt.text));
+        }
+      } else {
+        handleQuizComplete();
+      }
+    } catch (error) {
+      console.error('Error in handleNextQuestion:', error);
+      setError('Failed to proceed to next question. Please try again.');
     }
   };
 
@@ -114,16 +129,49 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
           // If timer reaches 0, auto-submit as a failed attempt
           if (prev <= 1) {
             clearInterval(interval);
-            // Mark the question as failed and move to next question
             handleTimeUp();
             return 0;
           }
-          return prev - 1; // Count down instead of up
+          return prev - 1;
         });
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [isPaused, isAnswerSubmitted, currentQuestionIndex, questions]);
+  }, [isPaused, isAnswerSubmitted, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (!isPaused && !isAnswerSubmitted) {
+      const interval = setInterval(() => {
+        setTimer(prev => {
+          // If timer reaches 0, auto-submit as a failed attempt
+          if (prev <= 1) {
+            clearInterval(interval);
+            handleTimeUp();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isPaused, isAnswerSubmitted, currentQuestionIndex]);
+
+  // Reset states when moving to a new question
+  useEffect(() => {
+    // Reset timer and states for new question
+    setTimer(300);
+    setIsAnswerSubmitted(false);
+    setIsCorrect(null);
+    setSelectedAnswer('');
+    setDroppedItems([]);
+    setError('');
+
+    // Initialize drag items if current question is drag type
+    const currentQuestion = questions[currentQuestionIndex];
+    if (currentQuestion?.type === 'drag' && currentQuestion.options) {
+      setDragItems(currentQuestion.options.map(opt => opt.text));
+    }
+  }, [currentQuestionIndex, questions]);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -287,8 +335,54 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
     }
   };
 
+  const saveQuizProgress = async (answer: string, questionTimeSpent: number) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const currentQuestion = questions[currentQuestionIndex];
+      const isCorrect = answer === currentQuestion.correctAnswer;
+      const score = isCorrect ? 10 : 0;
+
+      console.log('Saving quiz progress:', {
+        topic_id: Number(topicId),
+        question_id: currentQuestion.id,
+        is_correct: isCorrect,
+        time_spent: Math.max(0, Math.min(questionTimeSpent, 300)), // Clamp between 0-300 seconds
+        score: score,
+        answer: answer // Save the user's answer
+      });
+
+      await axios.post('http://localhost:5000/api/quizzes/progress', {
+        topic_id: Number(topicId),
+        question_id: currentQuestion.id,
+        is_correct: isCorrect,
+        time_spent: Math.max(0, Math.min(questionTimeSpent, 300)), // Clamp between 0-300 seconds
+        score: score,
+        answer: answer // Save the user's answer for review
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Quiz progress saved successfully');
+    } catch (error) {
+      console.error('Error saving quiz progress:', error);
+      // Don't throw error to prevent blocking question progression
+      // Just log it and let the user continue
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!selectedAnswer && droppedItems.length === 0) return;
+    if (!selectedAnswer && droppedItems.length === 0) {
+      setError('Please select an answer before submitting.');
+      return;
+    }
 
     try {
       const currentQuestion = questions[currentQuestionIndex];
@@ -319,10 +413,13 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
       
       // Update score based on answer correctness
       if (response.isCorrect) {
-        setScore(prevScore => prevScore + 10); // Add 10 points for correct answer
+        setScore(prevScore => prevScore + 10);
       } else {
-        setScore(prevScore => Math.max(0, prevScore - 5)); // Subtract 5 points for wrong answer, but don't go below 0
+        setScore(prevScore => Math.max(0, prevScore - 5)); // Don't go below 0
       }
+
+      // Save quiz progress to the database
+      await saveQuizProgress(answerToSubmit, 300 - timer);
 
       // Prepare the explanation content with image if available
       const explanationContent = document.createElement('div');
@@ -359,8 +456,26 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
           }
         }
       }).then(() => {
-        // Handle next question
-        handleNextQuestion();
+        // Reset question state before moving to next question
+        setSelectedAnswer('');
+        setIsAnswerSubmitted(false);
+        setIsCorrect(null);
+        setDroppedItems([]);
+        setError('');
+        
+        // Move to next question
+        if (currentQuestionIndex < questions.length - 1) {
+          setCurrentQuestionIndex(prev => prev + 1);
+          setTimer(300); // Reset timer
+          
+          // Initialize drag items if next question is drag type
+          const nextQuestion = questions[currentQuestionIndex + 1];
+          if (nextQuestion?.type === 'drag' && nextQuestion.options) {
+            setDragItems(nextQuestion.options.map(opt => opt.text));
+          }
+        } else {
+          handleQuizComplete();
+        }
       });
 
     } catch (error) {
@@ -435,6 +550,44 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
       );
     }
   };
+
+  const handleQuizComplete = async () => {
+    try {
+      const timeSpentOnQuestion = 300 - timer;
+      await saveQuizProgress(selectedAnswer, timeSpentOnQuestion);
+      
+      // Dispatch quiz completion event to update chart
+      window.dispatchEvent(new Event('quizComplete'));
+      
+      // Show completion message
+      swal({
+        title: "Quiz Complete!",
+        text: "You have completed the quiz. Your progress has been saved.",
+        icon: "success",
+        buttons: {
+          confirm: {
+            text: "View Dashboard",
+            value: true,
+            visible: true,
+            className: "bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg",
+          }
+        }
+      }).then((value) => {
+        if (value) {
+          navigate('/dashboard');
+        }
+      });
+    } catch (error) {
+      console.error('Error saving quiz progress:', error);
+      setError('Failed to save quiz progress. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (currentQuestionIndex === questions.length - 1) {
+      handleQuizComplete();
+    }
+  }, [currentQuestionIndex]);
 
   return (
     <div className="min-h-screen">
@@ -698,7 +851,18 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
                 
                 {/* SmartScore */}
                 <div className="flex flex-col mb-3 rounded-lg overflow-hidden shadow-md">
-                  <div className="px-3 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-center text-sm">
+                  <div
+                    className="px-3 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-center text-sm"
+                    title="Ebedmas SmartScore tracks your mastery level.
+Each badge represents a milestone in your learning journey:
+Bronze (30%): Getting Started
+Silver (50%): Making Progress
+Gold (70%): Strong Understanding
+Platinum (85%): Excellence
+Diamond (95%): Mastery
+Perfect (100%): Flawless
+Speed Demon: Complete under 1 min per question"
+                  >
                     <div className="flex items-center justify-center">
                       <span className="font-medium">SmartScore</span>
                       <div 
@@ -715,13 +879,6 @@ const TopicQuizPage = ({ logout }: { logout: () => void }) => {
                             fontWeight: 'bold',
                             color: '#f97316' // text-orange-500 equivalent
                           }}
-                          title="Ebedmas SmartScore
-is a dynamic measure of 
-your journey to mastery.
-It adapts to your performance,
-tracking your skill level as you
-tackle increasingly challenging questions.
-Keep answering correctly to reach the peak."
                         >?</div>
                       </div>
                     </div>
@@ -730,9 +887,9 @@ Keep answering correctly to reach the peak."
                   <div className="h-16 bg-white flex flex-col items-center justify-center">
                     <span className="text-3xl font-bold text-gray-700">{score}</span>
                     <div className="flex mt-1">
-                      {score >= 30 && <span className="text-xl">🏅</span>}
-                      {score >= 50 && <span className="text-xl">🏅</span>}
-                      {score >= 80 && <span className="text-xl">🏅</span>}
+                      {score >= 30 && <span className="text-xl">🥉</span>}
+                      {score >= 50 && <span className="text-xl">🥈</span>}
+                      {score >= 80 && <span className="text-xl">🥇</span>}
                       {score >= 90 && <span className="text-xl">🏅</span>}
                     </div>
                   </div>

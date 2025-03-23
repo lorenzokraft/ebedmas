@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -10,6 +10,7 @@ import {
   Label
 } from 'recharts';
 import { format, eachDayOfInterval, subDays, startOfToday } from 'date-fns';
+import axios from 'axios';
 
 interface SubjectPractice {
   subject: string;
@@ -23,33 +24,15 @@ interface PracticeData {
   practices: SubjectPractice[];
 }
 
-const generateMockData = (): PracticeData[] => {
-  const today = startOfToday();
-  const dates = eachDayOfInterval({
-    start: subDays(today, 30),
-    end: today
-  });
-
-  const subjects = ['Mathematics', 'English', 'Science'];
-
-  return dates.map(date => {
-    // Generate 1-3 subject practices for each day
-    const numPractices = Math.floor(Math.random() * 3) + 1;
-    const practices = subjects
-      .slice(0, numPractices)
-      .map(subject => ({
-        subject,
-        questions: Math.floor(Math.random() * 20),
-        timeSpent: Math.floor(Math.random() * 120)
-      }));
-
-    return {
-      date: format(date, 'dd MMM'),
-      totalQuestions: practices.reduce((sum, p) => sum + p.questions, 0),
-      practices
-    };
-  });
-};
+interface QuizProgress {
+  topic_id: number;
+  question_id: number;
+  is_correct: boolean;
+  time_spent: number;
+  score: number;
+  created_at: string;
+  subject_name: string;
+}
 
 const formatTime = (minutes: number): string => {
   const hours = Math.floor(minutes / 60);
@@ -111,8 +94,92 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const PracticeChart = () => {
-  const data = generateMockData();
+const PracticeChart: React.FC = () => {
+  const [data, setData] = useState<PracticeData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchQuizProgress = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await axios.get<QuizProgress[]>('http://localhost:5000/api/quizzes/quiz-progress', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      console.log('Quiz progress data:', response.data); // Debug log
+
+      // Group progress by date and subject
+      const progressByDate = response.data.reduce((acc: { [key: string]: { [subject: string]: SubjectPractice } }, item) => {
+        const date = format(new Date(item.created_at), 'dd MMM');
+        
+        if (!acc[date]) {
+          acc[date] = {};
+        }
+        
+        if (!acc[date][item.subject_name]) {
+          acc[date][item.subject_name] = {
+            subject: item.subject_name,
+            questions: 0,
+            timeSpent: 0
+          };
+        }
+        
+        acc[date][item.subject_name].questions += 1;
+        acc[date][item.subject_name].timeSpent += Math.floor(item.time_spent / 60); // Convert seconds to minutes
+        
+        return acc;
+      }, {});
+
+      // Format data for chart
+      const today = startOfToday();
+      const dates = eachDayOfInterval({
+        start: subDays(today, 30),
+        end: today
+      });
+
+      const chartData = dates.map(date => {
+        const dateKey = format(date, 'dd MMM');
+        const practices = progressByDate[dateKey] 
+          ? Object.values(progressByDate[dateKey])
+          : [];
+
+        return {
+          date: dateKey,
+          totalQuestions: practices.reduce((sum, p) => sum + p.questions, 0),
+          practices
+        };
+      });
+
+      console.log('Formatted chart data:', chartData); // Debug log
+      setData(chartData);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching quiz progress:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuizProgress();
+  }, []);
+
+  // Add event listener for quiz completion
+  useEffect(() => {
+    const handleQuizComplete = () => {
+      console.log('Quiz completed, refreshing chart data');
+      fetchQuizProgress();
+    };
+
+    window.addEventListener('quizComplete', handleQuizComplete);
+    return () => window.removeEventListener('quizComplete', handleQuizComplete);
+  }, []);
+
+  if (loading) {
+    return <div className="bg-white rounded-lg shadow p-6">Loading...</div>;
+  }
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -134,7 +201,8 @@ const PracticeChart = () => {
               angle={-45}
               textAnchor="end"
               height={70}
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: '#374151' }}
+              stroke="#9CA3AF"
             >
               <Label
                 value="Days Practice"
@@ -148,7 +216,10 @@ const PracticeChart = () => {
                 }}
               />
             </XAxis>
-            <YAxis>
+            <YAxis
+              stroke="#9CA3AF"
+              tick={{ fontSize: 12, fill: '#374151' }}
+            >
               <Label
                 value="Questions Answered"
                 angle={-90}
@@ -170,6 +241,7 @@ const PracticeChart = () => {
               dataKey="totalQuestions"
               fill="#00bcd4"
               radius={[4, 4, 0, 0]}
+              animationDuration={1000}
             />
           </BarChart>
         </ResponsiveContainer>
@@ -178,4 +250,4 @@ const PracticeChart = () => {
   );
 };
 
-export default PracticeChart; 
+export default PracticeChart;

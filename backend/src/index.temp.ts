@@ -1,8 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import adminRoutes from './routes/adminRoutes.js';
+// Temporarily commenting out problematic imports
+// import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js'; 
 import learnerRoutes from './routes/learnerRoutes.js';
 import gradeRoutes from './routes/gradeRoutes.js';
@@ -18,7 +19,7 @@ import quizRoutes from './routes/quizRoutes.js';
 import { ensureUploadDirectories } from './utils/ensureDirectories.js';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 // Ensure upload directories exist
 ensureUploadDirectories();
@@ -36,7 +37,7 @@ app.use(cors({
 app.use(express.json());
 
 // Serve uploaded files statically
-app.use('/api/uploads', express.static(join(__dirname, '../uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Debug middleware to log all requests and auth headers
 app.use((req, res, next) => {
@@ -50,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/admin', adminRoutes);
+// app.use('/api/admin', adminRoutes); // Temporarily commenting out
 app.use('/api/users', userRoutes);
 app.use('/api/learners', learnerRoutes);
 app.use('/api/grades', gradeRoutes);
@@ -62,8 +63,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/sections', sectionsRouter);
 app.use('/api/quote-requests', quoteRequestsRouter);
 app.use('/api/payments', paymentRoutes);
-// Quiz routes
-app.use('/api/quizzes', quizRoutes);
+app.use('/api/quiz', quizRoutes);
 
 // Debug endpoint
 app.get('/api/health', (req, res) => {

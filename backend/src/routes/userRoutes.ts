@@ -8,7 +8,8 @@ import {
   getPasswordStatus, 
   updateProfile, 
   changePassword, 
-  checkEmailExists 
+  checkEmailExists,
+  getUserQuizMetrics
 } from '../controllers/userController';
 import { authenticateToken } from '../middleware/auth';
 
@@ -27,5 +28,6 @@ router.post('/set-password', authenticateToken, setPassword);
 router.get('/password-status', authenticateToken, getPasswordStatus);
 router.post('/promote-to-admin', authenticateToken, promoteToAdmin);
 router.post('/change-password', authenticateToken, changePassword);
+router.get('/quiz-metrics', authenticateToken, getUserQuizMetrics);
 
 export default router;
