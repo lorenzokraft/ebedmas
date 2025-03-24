@@ -1,0 +1,14 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/username/public_html/
+    # Deploy backend files
+    - /bin/cp -R backend $DEPLOYPATH
+    # Deploy frontend build files (after building)
+    - /bin/cp -R frontend/build $DEPLOYPATH/frontend
+    # Deploy root configuration files
+    - /bin/cp package.json $DEPLOYPATH
+    - /bin/cp package-lock.json $DEPLOYPATH
+    # Deploy deployment script
+    - /bin/cp deploy.sh $DEPLOYPATH
+    - /bin/chmod +x $DEPLOYPATH/deploy.sh
