@@ -1,14 +1,18 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/username/public_html/
+    - export DEPLOYPATH=/home/ebedvmqz/public_html/
     # Deploy backend files
     - /bin/cp -R backend $DEPLOYPATH
     # Deploy frontend build files (after building)
-    - /bin/cp -R frontend/build $DEPLOYPATH/frontend
+    - /bin/cp -R frontend $DEPLOYPATH/frontend
     # Deploy root configuration files
     - /bin/cp package.json $DEPLOYPATH
     - /bin/cp package-lock.json $DEPLOYPATH
-    # Deploy deployment script
+    # Deploy deployment scripts
     - /bin/cp deploy.sh $DEPLOYPATH
     - /bin/chmod +x $DEPLOYPATH/deploy.sh
+    - /bin/cp deploy-with-ts-ignore.sh $DEPLOYPATH
+    - /bin/chmod +x $DEPLOYPATH/deploy-with-ts-ignore.sh
+    - /bin/cp check_app_running.sh $DEPLOYPATH
+    - /bin/chmod +x $DEPLOYPATH/check_app_running.sh
