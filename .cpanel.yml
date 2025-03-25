@@ -16,3 +16,5 @@ deployment:
     - /bin/chmod +x $DEPLOYPATH/deploy-with-ts-ignore.sh
     - /bin/cp check_app_running.sh $DEPLOYPATH
     - /bin/chmod +x $DEPLOYPATH/check_app_running.sh
+    - /bin/cp start-app.sh $DEPLOYPATH
+    - /bin/chmod +x $DEPLOYPATH/start-app.sh
